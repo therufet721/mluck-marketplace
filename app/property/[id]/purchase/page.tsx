@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { getSlotOwner, getMarketplaceAvailableSlots } from '../../../../lib/slots';
+import {  getMarketplaceAvailableSlots } from '../../../../lib/slots';
 import { useWalletStatus, usePurchaseSlots, useTokenBalance, useTokenApproval } from '../../../../lib/web3/hooks';
 import { ADDRESSES } from '../../../../lib/contracts';
 import { getProperty } from '../../../../lib/contracts';
@@ -43,6 +43,7 @@ export default function PropertyPurchasePage() {
     fee: number;
     slotContract: string;
     status: number;
+    name?: string;
   } | null>(null);
   
   // Get wallet connection status
@@ -76,6 +77,37 @@ export default function PropertyPurchasePage() {
     if (!propertyDetails) return 0;
     return slotCount * (calculatePrice(propertyDetails.price) + calculatePrice(propertyDetails.fee));
   };
+
+  // Add responsive state - improve with more breakpoints
+  const [screenSize, setScreenSize] = useState<'xs' | 'sm' | 'md' | 'lg' | 'xl'>('lg');
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Add useEffect for improved responsive detection
+  useEffect(() => {
+    const checkScreenSize = () => {
+      const width = window.innerWidth;
+      if (width < 480) {
+        setScreenSize('xs');
+        setIsMobile(true);
+      } else if (width < 768) {
+        setScreenSize('sm');
+        setIsMobile(true);
+      } else if (width < 992) {
+        setScreenSize('md');
+        setIsMobile(false);
+      } else if (width < 1200) {
+        setScreenSize('lg');
+        setIsMobile(false);
+      } else {
+        setScreenSize('xl');
+        setIsMobile(false);
+      }
+    };
+    
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
+    return () => window.removeEventListener('resize', checkScreenSize);
+  }, []);
 
   useEffect(() => {
     const fetchSlots = async () => {
@@ -113,7 +145,8 @@ export default function PropertyPurchasePage() {
           price: details.property.price,
           fee: details.property.fee,
           slotContract: details.property.slotContract,
-          status: details.status
+          status: details.status,
+          name: `Property #${propertyId}`
         });
       } catch (error) {
         console.error('Error fetching property details:', error);
@@ -305,6 +338,71 @@ export default function PropertyPurchasePage() {
     return currentBalance < totalCost;
   };
 
+  // Helper function to shorten text based on screen size
+  const shortenText = (text: string, maxLength: number) => {
+    if (!text) return '';
+    return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+  };
+
+  // Get appropriate property name length based on screen size
+  const getPropertyNameMaxLength = () => {
+    switch (screenSize) {
+      case 'xs': return 20;
+      case 'sm': return 25;
+      case 'md': return 35;
+      default: return 50;
+    }
+  };
+
+  // Get responsive padding and spacing values
+  const getResponsiveStyles = () => {
+    const styles = {
+      containerPadding: '15px 15px',
+      gridColumns: 'repeat(7, 1fr)',
+      gridGap: '15px',
+      fontSize: '1rem',
+      sidebarWidth: '0 0 600px',
+      imagePaddingRatio: '60%' // Reduced image height for desktop
+    };
+
+    switch (screenSize) {
+      case 'xs':
+        return {
+          ...styles,
+          containerPadding: '15px 10px',
+          gridColumns: 'repeat(5, 1fr)',
+          gridGap: '8px',
+          fontSize: '0.8rem',
+          sidebarWidth: '1',
+          imagePaddingRatio: '75%' // Maintain aspect ratio for mobile
+        };
+      case 'sm':
+        return {
+          ...styles,
+          containerPadding: '20px 15px',
+          gridColumns: 'repeat(6, 1fr)',
+          gridGap: '10px',
+          fontSize: '0.9rem',
+          sidebarWidth: '1',
+          imagePaddingRatio: '75%' // Maintain aspect ratio for mobile
+        };
+      case 'md':
+        return {
+          ...styles,
+          containerPadding: '30px 20px',
+          gridColumns: 'repeat(8, 1fr)',
+          gridGap: '12px',
+          fontSize: '0.95rem',
+          sidebarWidth: '0 0 350px',
+          imagePaddingRatio: '65%' // Slightly reduced for tablet
+        };
+      default:
+        return styles;
+    }
+  };
+
+  const responsiveStyles = getResponsiveStyles();
+
   console.log(propertyDetails);
   
   return (
@@ -313,17 +411,24 @@ export default function PropertyPurchasePage() {
       <div style={{ 
         maxWidth: '1200px', 
         margin: '0 auto', 
-        padding: '40px 20px',
+        padding: responsiveStyles.containerPadding,
         display: 'flex',
         flexDirection: 'column'
       }}>
         <div style={{
           display: 'flex',
-          alignItems: 'center',
+          flexDirection: isMobile ? 'column' : 'row',
+          alignItems: isMobile ? 'flex-start' : 'center',
           justifyContent: 'space-between',
-          marginBottom: '40px'
+          marginBottom: isMobile ? '20px' : '40px',
+          gap: isMobile ? '15px' : '0'
         }}>
-          <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+          <div style={{ 
+            display: 'flex', 
+            gap: isMobile ? '15px' : '20px', 
+            alignItems: 'center',
+            flexWrap: 'wrap'
+          }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{ 
                 width: '20px', 
@@ -332,7 +437,7 @@ export default function PropertyPurchasePage() {
                 opacity: 0.7, 
                 borderRadius: '50%' 
               }}></div>
-              <span>Owned Slot</span>
+              <span style={{ fontSize: isMobile ? '0.9rem' : '1rem' }}>Owned Slot</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{ 
@@ -342,7 +447,7 @@ export default function PropertyPurchasePage() {
                 border: '2px solid #4BD16F',
                 borderRadius: '50%' 
               }}></div>
-              <span>Available Slot</span>
+              <span style={{ fontSize: isMobile ? '0.9rem' : '1rem' }}>Available Slot</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{ 
@@ -351,9 +456,11 @@ export default function PropertyPurchasePage() {
                 backgroundColor: '#FF9F00',
                 borderRadius: '50%' 
               }}></div>
-              <span>Selected Slot</span>
+              <span style={{ fontSize: isMobile ? '0.9rem' : '1rem' }}>Selected Slot</span>
             </div>
           </div>
+          
+          {/* Network warnings */}
           {!isConnected && (
             <div style={{
               backgroundColor: '#FFF4E5',
@@ -395,33 +502,49 @@ export default function PropertyPurchasePage() {
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: '30px', maxWidth: '1200px' }}>
+        <div style={{ 
+          display: 'flex', 
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: isMobile ? '20px' : '30px', 
+          maxWidth: '1200px'
+        }}>
           {/* Property information */}
           <div style={{ 
-            flex: '0 0 300px',
+            flex: responsiveStyles.sidebarWidth,
             backgroundColor: '#E8FFF0',
             borderRadius: '15px',
-            padding: '20px',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+            padding: isMobile ? '15px' : '20px',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+            order: isMobile ? 2 : 1
           }}>
-            <Image 
-              src="/Properties.png"
-              alt="Property"
-              width={260}
-              height={260}
-              style={{ 
-                objectFit: 'cover', 
-                borderRadius: '10px',
-                marginBottom: '20px'
-              }}
-            />
+            <div style={{
+              position: 'relative',
+              width: '100%',
+              paddingBottom: responsiveStyles.imagePaddingRatio, // Use responsive ratio
+              marginBottom: '20px',
+              maxHeight: isMobile ? 'unset' : '300px', // Limit height on desktop
+              overflow: 'hidden'
+            }}>
+              <Image 
+                src="/Properties.png"
+                alt="Property"
+                fill
+                style={{ 
+                  objectFit: 'cover', 
+                  borderRadius: '10px',
+                }}
+              />
+            </div>
             
             <h2 style={{ 
-              fontSize: '1.5rem', 
+              fontSize: screenSize === 'xs' ? '1.2rem' : screenSize === 'sm' ? '1.3rem' : '1.5rem', 
               fontWeight: 'bold', 
-              marginBottom: '15px' 
+              marginBottom: '15px',
+              textOverflow: 'ellipsis',
+              overflow: 'hidden',
+              whiteSpace: 'nowrap'
             }}>
-              Property #{propertyId}
+              {propertyDetails ? shortenText(propertyDetails.name || `Property #${propertyId}`, getPropertyNameMaxLength()) : `Property #${propertyId}`}
             </h2>
             
             <div style={{ marginBottom: '20px' }}>
@@ -736,9 +859,10 @@ export default function PropertyPurchasePage() {
             flex: 1,
             backgroundColor: 'white',
             borderRadius: '15px',
-            padding: '30px',
+            padding: isMobile ? '15px' : '30px',
             boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-            minHeight: '600px'
+            minHeight: isMobile ? 'auto' : '600px',
+            order: isMobile ? 1 : 2
           }}>
             {loading ? (
               <div style={{ 
@@ -752,8 +876,8 @@ export default function PropertyPurchasePage() {
             ) : (
               <div style={{ 
                 display: 'grid',
-                gridTemplateColumns: 'repeat(10, 1fr)',
-                gap: '15px',
+                gridTemplateColumns: responsiveStyles.gridColumns,
+                gap: responsiveStyles.gridGap,
                 maxWidth: '800px',
                 margin: '0 auto'
               }}>
@@ -766,7 +890,7 @@ export default function PropertyPurchasePage() {
                       onClick={() => handleSlotClick(slot.id, slot.isSold)}
                       style={{ 
                         width: '100%',
-                        paddingBottom: '100%', // Make it a squaree
+                        paddingBottom: '100%',
                         borderRadius: '50%',
                         backgroundColor: slot.isSold 
                           ? '#4BD16F' 
@@ -787,7 +911,7 @@ export default function PropertyPurchasePage() {
                         top: '50%',
                         left: '50%',
                         transform: 'translate(-50%, -50%)',
-                        fontSize: '0.75rem',
+                        fontSize: isMobile ? '1rem' : '0.75rem',
                         fontWeight: '600',
                         color: slot.isSold 
                           ? 'white' 
@@ -804,6 +928,54 @@ export default function PropertyPurchasePage() {
             )}
           </div>
         </div>
+
+        {/* Fixed bottom bar for mobile */}
+        {isMobile && purchaseStep === 'select' && selectedSlots.length > 0 && (
+          <div style={{
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            backgroundColor: 'white',
+            padding: screenSize === 'xs' ? '10px' : '15px',
+            boxShadow: '0 -2px 10px rgba(0, 0, 0, 0.1)',
+            zIndex: 99
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '10px'
+            }}>
+              <div>
+                <div style={{ fontWeight: 'bold' }}>
+                  {selectedSlots.length} Slot{selectedSlots.length > 1 ? 's' : ''} Selected
+                </div>
+                <div style={{ fontSize: '0.9rem', color: '#666' }}>
+                  Total: {propertyDetails ? formatPrice((propertyDetails.price + propertyDetails.fee) * selectedSlots.length) : '0'} BUSD
+                </div>
+              </div>
+              <button 
+                style={{ 
+                  backgroundColor: isButtonDisabled() ? '#ccc' : '#4BD16F', 
+                  color: 'white', 
+                  padding: '10px 20px', 
+                  borderRadius: '9999px',
+                  border: 'none',
+                  cursor: isButtonDisabled() ? 'not-allowed' : 'pointer',
+                  fontWeight: '500',
+                  fontSize: '0.9rem',
+                  transition: 'background-color 0.2s ease',
+                  opacity: isButtonDisabled() ? 0.7 : 1
+                }}
+                onClick={needsApproval ? handleApprove : handlePurchase}
+                disabled={isButtonDisabled()}
+              >
+                {renderPurchaseButton()}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

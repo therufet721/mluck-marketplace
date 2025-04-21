@@ -5,6 +5,7 @@ import ClientWeb3Provider from "../components/providers/ClientWeb3Provider";
 import ForceNetworkSwitch from '../components/ForceNetworkSwitch';
 import NetworkChangeHandler from '../components/NetworkChangeHandler';
 import { PropertiesProvider } from '../contexts/PropertiesContext';
+import { MobileProvider } from '../contexts/MobileContext';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -27,9 +28,11 @@ export default function RootLayout({
       <body suppressHydrationWarning className="font-sans bg-white">
         <ClientWeb3Provider>
           <PropertiesProvider>
-            {children}
-            <ForceNetworkSwitch />
-            <NetworkChangeHandler />
+            <MobileProvider>
+              {children}
+              <ForceNetworkSwitch />
+              <NetworkChangeHandler />
+            </MobileProvider>
           </PropertiesProvider>
         </ClientWeb3Provider>
       </body>

@@ -12,6 +12,23 @@ import { Property } from '../../types'
 function SimplePropertyCard({ property, userAddress }: { property: Property, userAddress: string }) {
   const [ownedSlots, setOwnedSlots] = useState<number[]>([])
   const [loading, setLoading] = useState(true)
+  const [isMobile, setIsMobile] = useState(false)
+  
+  useEffect(() => {
+    // Handle responsive layout
+    const checkIfMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+    
+    // Initial check
+    checkIfMobile()
+    
+    // Add event listener for resize
+    window.addEventListener('resize', checkIfMobile)
+    
+    // Cleanup
+    return () => window.removeEventListener('resize', checkIfMobile)
+  }, [])
   
   useEffect(() => {
     const fetchSlots = async () => {
@@ -47,9 +64,17 @@ function SimplePropertyCard({ property, userAddress }: { property: Property, use
         {property.title}
       </h3>
       
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between',
+        flexDirection: isMobile ? 'column' : 'row',
+        gap: isMobile ? '15px' : '0'
+      }}>
         {/* Left side - Image */}
-        <div style={{ flex: '0 0 120px' }}>
+        <div style={{ 
+          flex: isMobile ? '1' : '0 0 120px',
+          alignSelf: isMobile ? 'center' : 'auto'
+        }}>
           <Image 
             src={property.imageUrl || "/Properties.png"}
             alt={property.title}
@@ -65,8 +90,8 @@ function SimplePropertyCard({ property, userAddress }: { property: Property, use
         {/* Middle - Property Info */}
         <div style={{ 
           flex: '1',
-          paddingLeft: '15px',
-          paddingRight: '15px',
+          paddingLeft: isMobile ? '0' : '15px',
+          paddingRight: isMobile ? '0' : '15px',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
@@ -87,7 +112,8 @@ function SimplePropertyCard({ property, userAddress }: { property: Property, use
               <div style={{ 
                 display: 'flex', 
                 flexWrap: 'wrap', 
-                gap: '5px'
+                gap: '5px',
+                justifyContent: isMobile ? 'center' : 'flex-start'
               }}>
                 {ownedSlots.map(slotId => (
                   <div 
@@ -115,9 +141,11 @@ function SimplePropertyCard({ property, userAddress }: { property: Property, use
         
         {/* Right side - Accumulated Income */}
         <div style={{
-          flex: '0 0 120px',
-          borderLeft: '1px solid #E0E0E0',
-          paddingLeft: '15px',
+          flex: isMobile ? '1' : '0 0 120px',
+          borderLeft: isMobile ? 'none' : '1px solid #E0E0E0',
+          borderTop: isMobile ? '1px solid #E0E0E0' : 'none',
+          paddingLeft: isMobile ? '0' : '15px',
+          paddingTop: isMobile ? '15px' : '0',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',

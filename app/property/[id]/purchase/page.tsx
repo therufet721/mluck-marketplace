@@ -11,9 +11,23 @@ import { getProvider } from '../../../../lib/slots';
 import Header from '../../../../components/Header';
 import { ethers } from 'ethers';
 
-// Helper function to format prices with 18 decimals
-const formatPrice = (price: number) => {
+// Helper function for price calculations
+const calculatePrice = (price: number) => {
   return price / Math.pow(10, 18);
+};
+
+// Helper function for price display
+const formatPrice = (price: number) => {
+  const formattedPrice = calculatePrice(price);
+  return Number.isInteger(formattedPrice) ? formattedPrice.toString() : formattedPrice.toFixed(2);
+};
+
+// Helper function to format balance display
+const formatBalanceDisplay = (balance: string) => {
+  if (!balance) return '';
+  const parts = balance.split(' ');
+  const number = parseFloat(parts[0]);
+  return `${Number.isInteger(number) ? number : number.toFixed(2)} ${parts[1]}`;
 };
 
 export default function PropertyPurchasePage() {
@@ -60,7 +74,7 @@ export default function PropertyPurchasePage() {
   // Helper function to calculate total cost
   const calculateTotalCost = (slotCount: number) => {
     if (!propertyDetails) return 0;
-    return slotCount * (formatPrice(propertyDetails.price) + formatPrice(propertyDetails.fee));
+    return slotCount * (calculatePrice(propertyDetails.price) + calculatePrice(propertyDetails.fee));
   };
 
   useEffect(() => {
@@ -151,9 +165,9 @@ export default function PropertyPurchasePage() {
       
       const allowance = await checkAllowance(ADDRESSES.MARKETPLACE);
       // Calculate required amount considering 18 decimals
-      const totalCost = selectedSlots.length * (propertyDetails.price + propertyDetails.fee);
+      const totalCost = selectedSlots.length * (calculatePrice(propertyDetails.price) + calculatePrice(propertyDetails.fee));
       // Add 10% buffer and format to user-friendly number
-      const requiredAmount = totalCost * 1.1 / Math.pow(10, 18);
+      const requiredAmount = totalCost * 1.1;
       setNeedsApproval(Number(allowance) < requiredAmount);
     };
 
@@ -245,8 +259,8 @@ export default function PropertyPurchasePage() {
     try {
       setPurchaseStep('processing');
       // Calculate total cost with 10% buffer in actual token amount (not divided by 10^18)
-      const totalCost = selectedSlots.length * (propertyDetails.price + propertyDetails.fee);
-      const requiredAmountWithBuffer = totalCost * 1.1 / Math.pow(10, 18);
+      const totalCost = selectedSlots.length * (calculatePrice(propertyDetails.price) + calculatePrice(propertyDetails.fee));
+      const requiredAmountWithBuffer = totalCost * 1.1;
       await approve(ADDRESSES.MARKETPLACE, requiredAmountWithBuffer);
       setNeedsApproval(false);
       
@@ -417,7 +431,7 @@ export default function PropertyPurchasePage() {
                 marginBottom: '10px' 
               }}>
                 <span>Price per Slot:</span>
-                <span style={{ fontWeight: 'bold' }}>{propertyDetails ? formatPrice(propertyDetails.price).toFixed(6) : '...'} BUSD</span>
+                <span style={{ fontWeight: 'bold' }}>{propertyDetails ? formatPrice(propertyDetails.price) : '...'} BUSD</span>
               </div>
               
               <div style={{ 
@@ -426,7 +440,7 @@ export default function PropertyPurchasePage() {
                 marginBottom: '10px' 
               }}>
                 <span>Fee per Slot:</span>
-                <span style={{ fontWeight: 'bold' }}>{propertyDetails ? formatPrice(propertyDetails.fee).toFixed(6) : '...'} BUSD</span>
+                <span style={{ fontWeight: 'bold' }}>{propertyDetails ? formatPrice(propertyDetails.fee) : '...'} BUSD</span>
               </div>
 
               <div style={{ 
@@ -436,7 +450,7 @@ export default function PropertyPurchasePage() {
               }}>
                 <span>Total Cost per Slot:</span>
                 <span style={{ fontWeight: 'bold' }}>
-                  {propertyDetails ? (formatPrice(propertyDetails.price) + formatPrice(propertyDetails.fee)).toFixed(6) : '...'} BUSD
+                  {propertyDetails ? (formatPrice(propertyDetails.price + propertyDetails.fee)) : '...'} BUSD
                 </span>
               </div>
               
@@ -493,13 +507,13 @@ export default function PropertyPurchasePage() {
               }}>
                 <p style={{ marginBottom: '10px', fontWeight: 'bold' }}>Selected Slots: {selectedSlots.length}</p>
                 <p style={{ marginBottom: '5px' }}>
-                  Base Price: {propertyDetails ? (formatPrice(propertyDetails.price) * selectedSlots.length).toFixed(6) : '0'} BUSD
+                  Base Price: {propertyDetails ? formatPrice(propertyDetails.price * selectedSlots.length) : '0'} BUSD
                 </p>
                 <p style={{ marginBottom: '5px' }}>
-                  Fees: {propertyDetails ? (formatPrice(propertyDetails.fee) * selectedSlots.length).toFixed(6) : '0'} BUSD
+                  Fees: {propertyDetails ? formatPrice(propertyDetails.fee * selectedSlots.length) : '0'} BUSD
                 </p>
                 <p style={{ marginBottom: '10px', fontWeight: 'bold' }}>
-                  Total Cost: {propertyDetails ? calculateTotalCost(selectedSlots.length).toFixed(6) : '0'} BUSD
+                  Total Cost: {propertyDetails ? formatPrice((propertyDetails.price + propertyDetails.fee) * selectedSlots.length) : '0'} BUSD
                 </p>
                 {balance && (
                   <p style={{ 
@@ -507,7 +521,7 @@ export default function PropertyPurchasePage() {
                     color: parseUserBalance() < calculateTotalCost(selectedSlots.length) ? '#FFE0E0' : 'white',
                     marginBottom: '10px'
                   }}>
-                    Your Balance: {balance}
+                    Your Balance: {formatBalanceDisplay(balance)}
                     {parseUserBalance() < calculateTotalCost(selectedSlots.length) && (
                       <span style={{ display: 'block', marginTop: '5px', color: '#FFE0E0' }}>
                         Insufficient balance. Please add more BUSD to cover the purchase and fees.
@@ -551,8 +565,8 @@ export default function PropertyPurchasePage() {
               }}>
                 <p style={{ marginBottom: '10px', fontWeight: 'bold' }}>Confirm Purchase</p>
                 <p style={{ marginBottom: '5px' }}>
-                  You are about to purchase {selectedSlots.length} slot{selectedSlots.length > 1 ? 's' : ''} for a total of {propertyDetails ? calculateTotalCost(selectedSlots.length).toFixed(6) : '0'} BUSD
-                  ({propertyDetails ? (formatPrice(propertyDetails.price) + formatPrice(propertyDetails.fee)).toFixed(6) : '0'} BUSD per slot).
+                  You are about to purchase {selectedSlots.length} slot{selectedSlots.length > 1 ? 's' : ''} for a total of {propertyDetails ? formatPrice((propertyDetails.price + propertyDetails.fee) * selectedSlots.length) : '0'} BUSD
+                  ({propertyDetails ? formatPrice(propertyDetails.price + propertyDetails.fee) : '0'} BUSD per slot).
                 </p>
                 <p style={{ fontSize: '0.8rem', marginBottom: '10px' }}>This action cannot be undone.</p>
                 

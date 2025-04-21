@@ -1,6 +1,5 @@
 import React from 'react';
 import Image from 'next/image';
-import { formatCurrency } from '../lib/utils';
 import { Property } from '../types';
 import Link from 'next/link';
 

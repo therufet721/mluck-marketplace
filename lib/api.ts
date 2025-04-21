@@ -19,6 +19,7 @@ export async function getProperties(): Promise<Property[]> {
       rental_income: property.rental_income === 1 ? "Yes" : "No",
       apy: property.apy,
       price: property.price,
+      slotContract: property.address, // Use the property address as the slot contract address
     }));
   } catch (error) {
     console.error("Error fetching properties:", error);
@@ -115,5 +116,20 @@ export async function claimAllAssets(holderAddress: string, signature: string): 
   } catch (error) {
     console.error("Error claiming all assets:", error);
     throw error;
+  }
+}
+
+export async function getPropertySlots(propertyAddress: string): Promise<any> {
+  try {
+    const response = await fetch(`${API_URL}/api/v1/asset/${propertyAddress}/slots`);
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return data.data.slots;
+  } catch (error) {
+    console.error("Error fetching property slots:", error);
+    return [];
   }
 } 

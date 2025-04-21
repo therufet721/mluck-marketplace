@@ -3,9 +3,18 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { getSlotOwner } from '../../../../lib/slots';
-import { useWalletStatus, usePurchaseSlots } from '../../../../lib/web3/hooks';
+import { getSlotOwner, getMarketplaceAvailableSlots } from '../../../../lib/slots';
+import { useWalletStatus, usePurchaseSlots, useTokenBalance, useTokenApproval } from '../../../../lib/web3/hooks';
+import { ADDRESSES } from '../../../../lib/contracts';
+import { getProperty } from '../../../../lib/contracts';
+import { getProvider } from '../../../../lib/slots';
 import Header from '../../../../components/Header';
+import { ethers } from 'ethers';
+
+// Helper function to format prices with 18 decimals
+const formatPrice = (price: number) => {
+  return price / Math.pow(10, 18);
+};
 
 export default function PropertyPurchasePage() {
   const params = useParams();
@@ -15,9 +24,18 @@ export default function PropertyPurchasePage() {
   const [selectedSlots, setSelectedSlots] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [purchaseStep, setPurchaseStep] = useState<'select' | 'confirm' | 'processing' | 'success' | 'error'>('select');
+  const [propertyDetails, setPropertyDetails] = useState<{
+    price: number;
+    fee: number;
+    slotContract: string;
+    status: number;
+  } | null>(null);
   
   // Get wallet connection status
-  const { isConnected, address } = useWalletStatus();
+  const { isConnected, address, isCorrectNetwork, switchNetwork } = useWalletStatus();
+  
+  // Get token balance
+  const { balance, loading: balanceLoading, refetch: refetchBalance } = useTokenBalance();
   
   // Get purchase functionality
   const { 
@@ -28,19 +46,35 @@ export default function PropertyPurchasePage() {
     txHash
   } = usePurchaseSlots();
 
+  // Get token approval functionality
+  const { approve, checkAllowance, loading: approvalLoading, error: approvalError } = useTokenApproval();
+  const [needsApproval, setNeedsApproval] = useState(false);
+
+  // Helper function to parse user balance
+  const parseUserBalance = () => {
+    if (!balance) return 0;
+    const balanceParts = balance.split(' ');
+    return parseFloat(balanceParts[0]);
+  };
+
+  // Helper function to calculate total cost
+  const calculateTotalCost = (slotCount: number) => {
+    if (!propertyDetails) return 0;
+    return slotCount * (formatPrice(propertyDetails.price) + formatPrice(propertyDetails.fee));
+  };
+
   useEffect(() => {
     const fetchSlots = async () => {
       setLoading(true);
       try {
-        // Create an array of 100 slots
-        const slotsPromises = Array.from({ length: 100 }, async (_, index) => {
-          const id = index + 1;
-          // Check if the slot is already owned
-          const owner = await getSlotOwner(id);
-          return { id, isSold: owner !== null };
-        });
+        const availableSlots = await getMarketplaceAvailableSlots(propertyId);
         
-        const slotsData = await Promise.all(slotsPromises);
+        const TOTAL = 99;
+        const slotsData = Array.from({ length: TOTAL }, (_, i) => ({ 
+          id: i + 1, 
+          isSold: !availableSlots.includes(i + 1) 
+        }));
+        
         setSlots(slotsData);
       } catch (error) {
         console.error('Error fetching slot data:', error);
@@ -49,7 +83,32 @@ export default function PropertyPurchasePage() {
       }
     };
 
-    fetchSlots();
+    if (propertyId) {
+      fetchSlots();
+    }
+  }, [propertyId]);
+  
+  useEffect(() => {
+    const fetchPropertyDetails = async () => {
+      try {
+        const provider = getProvider();
+        console.log(provider);
+        
+        const details = await getProperty(provider as ethers.JsonRpcProvider, propertyId);
+        setPropertyDetails({
+          price: details.property.price,
+          fee: details.property.fee,
+          slotContract: details.property.slotContract,
+          status: details.status
+        });
+      } catch (error) {
+        console.error('Error fetching property details:', error);
+      }
+    };
+
+    if (propertyId) {
+      fetchPropertyDetails();
+    }
   }, [propertyId]);
   
   // Reset state when purchase is successful
@@ -60,15 +119,12 @@ export default function PropertyPurchasePage() {
       setTimeout(() => {
         const fetchSlotsAfterPurchase = async () => {
           try {
-            // Create an array of 100 slots
-            const slotsPromises = Array.from({ length: 100 }, async (_, index) => {
-              const id = index + 1;
-              // Check if the slot is already owned
-              const owner = await getSlotOwner(id);
-              return { id, isSold: owner !== null };
-            });
-            
-            const slotsData = await Promise.all(slotsPromises);
+            const availableSlots = await getMarketplaceAvailableSlots(propertyId);
+            const TOTAL = 99;
+            const slotsData = Array.from({ length: TOTAL }, (_, i) => ({ 
+              id: i + 1, 
+              isSold: !availableSlots.includes(i + 1) 
+            }));
             setSlots(slotsData);
             setSelectedSlots([]);
           } catch (error) {
@@ -79,7 +135,7 @@ export default function PropertyPurchasePage() {
         fetchSlotsAfterPurchase();
       }, 2000);
     }
-  }, [purchaseSuccess]);
+  }, [purchaseSuccess, propertyId]);
   
   // Handle errors
   useEffect(() => {
@@ -87,6 +143,49 @@ export default function PropertyPurchasePage() {
       setPurchaseStep('error');
     }
   }, [purchaseError]);
+
+  // Check if we need approval when slots are selected
+  useEffect(() => {
+    const checkApprovalNeeded = async () => {
+      if (!isConnected || selectedSlots.length === 0 || !propertyDetails) return;
+      
+      const allowance = await checkAllowance(ADDRESSES.MARKETPLACE);
+      // Calculate required amount considering 18 decimals
+      const totalCost = selectedSlots.length * (propertyDetails.price + propertyDetails.fee);
+      // Add 10% buffer and format to user-friendly number
+      const requiredAmount = totalCost * 1.1 / Math.pow(10, 18);
+      setNeedsApproval(Number(allowance) < requiredAmount);
+    };
+
+    checkApprovalNeeded();
+  }, [isConnected, selectedSlots, checkAllowance, propertyDetails]);
+
+  // Add a useEffect to monitor balance changes
+  useEffect(() => {
+    if (isConnected) {
+      // Initial balance check
+      refetchBalance();
+      
+      // Set up polling for balance updates
+      const interval = setInterval(refetchBalance, 5000); // Check every 5 seconds
+      
+      return () => clearInterval(interval);
+    }
+  }, [isConnected, refetchBalance]);
+
+  // Add useEffect to monitor selected slots and balance
+  useEffect(() => {
+    if (selectedSlots.length > 0 && balance && propertyDetails) {
+      const totalCost = calculateTotalCost(selectedSlots.length);
+      const currentBalance = parseUserBalance();
+      
+      if (currentBalance < totalCost) {
+        console.log('Insufficient balance:', currentBalance, 'needed:', totalCost);
+      } else {
+        console.log('Sufficient balance:', currentBalance, 'needed:', totalCost);
+      }
+    }
+  }, [selectedSlots, balance, propertyDetails]);
 
   const handleSlotClick = (slotId: number, isSold: boolean) => {
     if (isSold || purchaseStep !== 'select') return;
@@ -111,6 +210,15 @@ export default function PropertyPurchasePage() {
       return;
     }
     
+    // Check if on the correct network
+    if (!isCorrectNetwork) {
+      const switched = await switchNetwork();
+      if (!switched) {
+        alert('Please switch to Polygon network to continue');
+        return;
+      }
+    }
+    
     // Set to confirm step
     setPurchaseStep('confirm');
   };
@@ -120,7 +228,7 @@ export default function PropertyPurchasePage() {
     
     try {
       setPurchaseStep('processing');
-      await purchaseSlots(selectedSlots);
+      await purchaseSlots(propertyId, selectedSlots);
     } catch (error) {
       console.error('Error purchasing slots:', error);
       setPurchaseStep('error');
@@ -131,6 +239,60 @@ export default function PropertyPurchasePage() {
     setPurchaseStep('select');
   };
 
+  const handleApprove = async () => {
+    if (!isConnected || selectedSlots.length === 0 || !propertyDetails) return;
+    
+    try {
+      setPurchaseStep('processing');
+      // Calculate total cost with 10% buffer in actual token amount (not divided by 10^18)
+      const totalCost = selectedSlots.length * (propertyDetails.price + propertyDetails.fee);
+      const requiredAmountWithBuffer = totalCost * 1.1 / Math.pow(10, 18);
+      await approve(ADDRESSES.MARKETPLACE, requiredAmountWithBuffer);
+      setNeedsApproval(false);
+      
+      // Automatically proceed with purchase after approval
+      try {
+        await purchaseSlots(propertyId, selectedSlots);
+      } catch (error) {
+        console.error('Error purchasing slots:', error);
+        setPurchaseStep('error');
+      }
+    } catch (error) {
+      console.error('Error approving tokens:', error);
+      setPurchaseStep('error');
+    }
+  };
+
+  // Update the button rendering logic
+  const renderPurchaseButton = () => {
+    if (!isConnected) return 'Connect Wallet';
+    if (!isCorrectNetwork) return 'Switch Network';
+    if (selectedSlots.length === 0) return 'Select Slots';
+    if (balanceLoading) return 'Checking Balance...';
+    
+    const totalCost = calculateTotalCost(selectedSlots.length);
+    const currentBalance = parseUserBalance();
+    
+    if (currentBalance < totalCost) return 'Insufficient Balance';
+    if (needsApproval) return 'Approve BUSD Spending';
+    return `Purchase ${selectedSlots.length} Slots`;
+  };
+
+  // Update the button disabled state logic
+  const isButtonDisabled = () => {
+    if (!isConnected) return true;
+    if (!isCorrectNetwork) return true;
+    if (selectedSlots.length === 0) return true;
+    if (balanceLoading) return true;
+    
+    const totalCost = calculateTotalCost(selectedSlots.length);
+    const currentBalance = parseUserBalance();
+    
+    return currentBalance < totalCost;
+  };
+
+  console.log(propertyDetails);
+  
   return (
     <>
       <Header title="Purchase Property Slots" />
@@ -189,9 +351,37 @@ export default function PropertyPurchasePage() {
               Please connect your wallet to purchase slots
             </div>
           )}
+          {isConnected && !isCorrectNetwork && (
+            <div style={{
+              backgroundColor: '#FFF4E5',
+              color: '#FF9F00',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              fontSize: '0.9rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px'
+            }}>
+              <span>Please switch to Polygon network</span>
+              <button 
+                onClick={switchNetwork}
+                style={{
+                  backgroundColor: '#FF9F00',
+                  color: 'white',
+                  border: 'none',
+                  padding: '5px 10px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '0.8rem'
+                }}
+              >
+                Switch Network
+              </button>
+            </div>
+          )}
         </div>
 
-        <div style={{ display: 'flex', gap: '30px' }}>
+        <div style={{ display: 'flex', gap: '30px', maxWidth: '1200px' }}>
           {/* Property information */}
           <div style={{ 
             flex: '0 0 300px',
@@ -226,8 +416,28 @@ export default function PropertyPurchasePage() {
                 justifyContent: 'space-between', 
                 marginBottom: '10px' 
               }}>
-                <span>Slot Price:</span>
-                <span style={{ fontWeight: 'bold' }}>100 USDT</span>
+                <span>Price per Slot:</span>
+                <span style={{ fontWeight: 'bold' }}>{propertyDetails ? formatPrice(propertyDetails.price).toFixed(6) : '...'} BUSD</span>
+              </div>
+              
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                marginBottom: '10px' 
+              }}>
+                <span>Fee per Slot:</span>
+                <span style={{ fontWeight: 'bold' }}>{propertyDetails ? formatPrice(propertyDetails.fee).toFixed(6) : '...'} BUSD</span>
+              </div>
+
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                marginBottom: '10px' 
+              }}>
+                <span>Total Cost per Slot:</span>
+                <span style={{ fontWeight: 'bold' }}>
+                  {propertyDetails ? (formatPrice(propertyDetails.price) + formatPrice(propertyDetails.fee)).toFixed(6) : '...'} BUSD
+                </span>
               </div>
               
               <div style={{ 
@@ -247,6 +457,29 @@ export default function PropertyPurchasePage() {
                 <span>Available Slots:</span>
                 <span style={{ fontWeight: 'bold' }}>{slots.filter(slot => !slot.isSold).length}</span>
               </div>
+              
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                marginBottom: '10px' 
+              }}>
+                <span>Network:</span>
+                <span style={{ fontWeight: 'bold', color: '#FF9F00' }}>Polygon</span>
+              </div>
+
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                marginBottom: '10px' 
+              }}>
+                <span>Status:</span>
+                <span style={{ 
+                  fontWeight: 'bold', 
+                  color: propertyDetails?.status === 1 ? '#4BD16F' : '#FF9F00'
+                }}>
+                  {propertyDetails?.status === 1 ? 'Active' : propertyDetails?.status === 0 ? 'Inactive' : '...'}
+                </span>
+              </div>
             </div>
             
             {/* Purchase steps */}
@@ -259,7 +492,40 @@ export default function PropertyPurchasePage() {
                 marginBottom: '20px'
               }}>
                 <p style={{ marginBottom: '10px', fontWeight: 'bold' }}>Selected Slots: {selectedSlots.length}</p>
-                <p style={{ marginBottom: '5px' }}>Total Price: {selectedSlots.length * 100} USDT</p>
+                <p style={{ marginBottom: '5px' }}>
+                  Base Price: {propertyDetails ? (formatPrice(propertyDetails.price) * selectedSlots.length).toFixed(6) : '0'} BUSD
+                </p>
+                <p style={{ marginBottom: '5px' }}>
+                  Fees: {propertyDetails ? (formatPrice(propertyDetails.fee) * selectedSlots.length).toFixed(6) : '0'} BUSD
+                </p>
+                <p style={{ marginBottom: '10px', fontWeight: 'bold' }}>
+                  Total Cost: {propertyDetails ? calculateTotalCost(selectedSlots.length).toFixed(6) : '0'} BUSD
+                </p>
+                {balance && (
+                  <p style={{ 
+                    fontSize: '0.9rem',
+                    color: parseUserBalance() < calculateTotalCost(selectedSlots.length) ? '#FFE0E0' : 'white',
+                    marginBottom: '10px'
+                  }}>
+                    Your Balance: {balance}
+                    {parseUserBalance() < calculateTotalCost(selectedSlots.length) && (
+                      <span style={{ display: 'block', marginTop: '5px', color: '#FFE0E0' }}>
+                        Insufficient balance. Please add more BUSD to cover the purchase and fees.
+                      </span>
+                    )}
+                  </p>
+                )}
+                {needsApproval && (
+                  <p style={{ 
+                    fontSize: '0.9rem', 
+                    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                    padding: '8px',
+                    borderRadius: '5px',
+                    marginBottom: '10px'
+                  }}>
+                    Approval needed: The marketplace needs your permission to spend BUSD tokens.
+                  </p>
+                )}
                 <div style={{ 
                   maxHeight: '60px', 
                   overflowY: 'auto', 
@@ -284,7 +550,10 @@ export default function PropertyPurchasePage() {
                 marginBottom: '20px'
               }}>
                 <p style={{ marginBottom: '10px', fontWeight: 'bold' }}>Confirm Purchase</p>
-                <p style={{ marginBottom: '5px' }}>You are about to purchase {selectedSlots.length} slots for {selectedSlots.length * 100} USDT.</p>
+                <p style={{ marginBottom: '5px' }}>
+                  You are about to purchase {selectedSlots.length} slot{selectedSlots.length > 1 ? 's' : ''} for a total of {propertyDetails ? calculateTotalCost(selectedSlots.length).toFixed(6) : '0'} BUSD
+                  ({propertyDetails ? (formatPrice(propertyDetails.price) + formatPrice(propertyDetails.fee)).toFixed(6) : '0'} BUSD per slot).
+                </p>
                 <p style={{ fontSize: '0.8rem', marginBottom: '10px' }}>This action cannot be undone.</p>
                 
                 <div style={{ display: 'flex', gap: '10px' }}>
@@ -364,7 +633,7 @@ export default function PropertyPurchasePage() {
                 <p style={{ marginBottom: '10px' }}>Your slots have been purchased successfully.</p>
                 {txHash && (
                   <a 
-                    href={`https://bscscan.com/tx/${txHash}`} 
+                    href={`${process.env.NEXT_PUBLIC_EXPLORER_URL}/tx/${txHash}`} 
                     target="_blank" 
                     rel="noopener noreferrer"
                     style={{ 
@@ -427,23 +696,23 @@ export default function PropertyPurchasePage() {
             {purchaseStep === 'select' && (
               <button 
                 style={{ 
-                  backgroundColor: selectedSlots.length === 0 ? '#ccc' : '#4BD16F', 
+                  backgroundColor: isButtonDisabled() ? '#ccc' : '#4BD16F', 
                   color: 'white', 
                   width: '100%', 
                   padding: '12px 0', 
                   borderRadius: '9999px',
                   border: 'none',
-                  cursor: selectedSlots.length === 0 ? 'not-allowed' : 'pointer',
+                  cursor: isButtonDisabled() ? 'not-allowed' : 'pointer',
                   fontWeight: '500',
                   fontSize: '1rem',
                   transition: 'background-color 0.2s ease',
                   boxShadow: '0 2px 4px rgba(75, 209, 111, 0.3)',
-                  opacity: selectedSlots.length === 0 ? 0.7 : 1
+                  opacity: isButtonDisabled() ? 0.7 : 1
                 }}
-                onClick={handlePurchase}
-                disabled={selectedSlots.length === 0}
+                onClick={needsApproval ? handleApprove : handlePurchase}
+                disabled={isButtonDisabled()}
               >
-                {selectedSlots.length === 0 ? 'Select Slots' : `Purchase ${selectedSlots.length} Slots`}
+                {renderPurchaseButton()}
               </button>
             )}
           </div>
@@ -483,7 +752,7 @@ export default function PropertyPurchasePage() {
                       onClick={() => handleSlotClick(slot.id, slot.isSold)}
                       style={{ 
                         width: '100%',
-                        paddingBottom: '100%', // Make it a square
+                        paddingBottom: '100%', // Make it a squaree
                         borderRadius: '50%',
                         backgroundColor: slot.isSold 
                           ? '#4BD16F' 

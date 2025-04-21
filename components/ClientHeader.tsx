@@ -4,12 +4,16 @@ import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useTokenBalance, useWalletStatus } from '../lib/web3/hooks';
 
 type ClientHeaderProps = {
   title?: string;
 };
 
 export default function ClientHeader({ title = 'Dashboard' }: ClientHeaderProps) {
+  const { balance, loading } = useTokenBalance();
+  const { isCorrectNetwork, switchNetwork } = useWalletStatus();
+  
   return (
     <header style={{
       backgroundColor: '#0F1713',
@@ -49,7 +53,6 @@ export default function ClientHeader({ title = 'Dashboard' }: ClientHeaderProps)
         }}>
           <div style={{ display: 'flex', alignItems: 'center' }}>
             <Link href="/" style={{ textDecoration: 'none' }}>
-             
                   <Image src="/Logo.svg" alt="MLuck Logo" width={76.56999969482422} height={71.0000228881836} />
             </Link>
           </div>
@@ -78,11 +81,92 @@ export default function ClientHeader({ title = 'Dashboard' }: ClientHeaderProps)
             </Link>
           </div>
           
+          {/* Network Badge */}
+          <div style={{ 
+            background: isCorrectNetwork ? 'rgba(77, 209, 111, 0.2)' : 'rgba(255, 159, 0, 0.2)', 
+            color: 'white',
+            padding: '6px 12px', 
+            borderRadius: '12px',
+            marginRight: '10px',
+            fontSize: '12px',
+            fontWeight: '600',
+            display: 'flex',
+            alignItems: 'center',
+            minWidth: '120px',
+            boxShadow: isCorrectNetwork 
+              ? '0 2px 6px rgba(77, 209, 111, 0.3)'
+              : '0 2px 6px rgba(255, 159, 0, 0.3)'
+          }}>
+            <div style={{ 
+              width: '8px', 
+              height: '8px', 
+              backgroundColor: isCorrectNetwork ? '#4BD16F' : '#FF9F00', 
+              borderRadius: '50%',
+              marginRight: '8px',
+              boxShadow: isCorrectNetwork 
+                ? '0 0 5px rgba(77, 209, 111, 0.8)'
+                : '0 0 5px rgba(255, 159, 0, 0.8)'
+            }}></div>
+            {isCorrectNetwork 
+              ? (
+                <div>
+                  Polygon
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span>Wrong Network</span>
+                  <button 
+                    onClick={switchNetwork}
+                    style={{
+                      backgroundColor: '#FF9F00',
+                      color: 'white',
+                      border: 'none',
+                      padding: '2px 5px',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '10px'
+                    }}
+                  >
+                    Switch to Polygon
+                  </button>
+                </div>
+              )
+            }
+          </div>
+          
+          {/* User Balance */}
+          <div style={{ 
+            background: 'rgba(77, 209, 111, 0.2)', 
+            color: 'white',
+            padding: '8px 16px', 
+            borderRadius: '12px',
+            marginRight: '10px',
+            fontSize: '14px',
+            fontWeight: '600',
+            display: 'flex',
+            alignItems: 'center',
+            minWidth: '150px',
+            boxShadow: '0 2px 6px rgba(77, 209, 111, 0.3)',
+            opacity: balance ? 1 : 0.5,
+            transition: 'opacity 0.2s ease'
+          }}>
+            <div style={{ 
+              width: '8px', 
+              height: '8px', 
+              backgroundColor: '#4BD16F', 
+              borderRadius: '50%',
+              marginRight: '8px',
+              boxShadow: '0 0 5px rgba(77, 209, 111, 0.8)'
+            }}></div>
+            {loading ? '0.00 MLUCK' : balance || '0.00 MLUCK'}
+          </div>
+          
           {/* RainbowKit Connect Button */}
           <div style={{ 
             background: 'rgba(0, 0, 0, 0.2)', 
             padding: '4px', 
             borderRadius: '12px',
+            minWidth: '180px',
             boxShadow: '0 2px 6px rgba(0, 0, 0, 0.15)'
           }}>
             <ConnectButton 

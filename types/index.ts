@@ -1,3 +1,11 @@
+export interface Slot {
+  id: string;
+  tokenId: string;
+  owner: string;
+  status: string;
+  claimable: string;
+}
+
 export interface Property {
   id: string;
   address: string;
@@ -6,7 +14,11 @@ export interface Property {
   rental_income: string;
   apy: string;
   price: string;
+  slotContract: string;
   imageUrl?: string;
+  availableSlots?: number;
+  totalSlots?: number;
+  isActive?: boolean;
 }
 
 export interface ClaimableAsset {

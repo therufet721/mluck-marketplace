@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from 'next/font/google';
-import "../src/app/globals.css";
+import "./globals.css";
 import ClientWeb3Provider from "../components/providers/ClientWeb3Provider";
 import ForceNetworkSwitch from '../components/ForceNetworkSwitch';
 import NetworkChangeHandler from '../components/NetworkChangeHandler';
@@ -16,6 +16,10 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "MLuck Marketplace",
   description: "Find your lucky property",
+  icons: {
+    icon: "/Logo.svg",
+    apple: "/Logo.svg",
+  },
 };
 
 export default function RootLayout({

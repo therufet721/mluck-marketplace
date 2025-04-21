@@ -46,8 +46,6 @@ export interface Promocode {
 
 // Helper function to create contract instances
 export async function getContracts(provider: ethers.JsonRpcProvider) {
-  console.log("Creating contracts with provider:", provider);
-  console.log("Using marketplace address:", ADDRESSES.MARKETPLACE);
   try {
     const marketplace = new ethers.Contract(ADDRESSES.MARKETPLACE, marketplaceAbi, provider);
     return { marketplace };
@@ -59,8 +57,6 @@ export async function getContracts(provider: ethers.JsonRpcProvider) {
 
 // Function to get contract with signer for transactions
 export async function getContractsWithSigner(signer: ethers.JsonRpcSigner) {
-  console.log("Creating contracts with signer:", signer);
-  console.log("Using marketplace address:", ADDRESSES.MARKETPLACE);
   try {
     const marketplace = new ethers.Contract(ADDRESSES.MARKETPLACE, marketplaceAbi, signer);
     return { marketplace };

@@ -10,6 +10,7 @@ import { getProperty } from '../../../../lib/contracts';
 import { getProvider } from '../../../../lib/slots';
 import Header from '../../../../components/Header';
 import { ethers } from 'ethers';
+import { useMobile } from '../../../../contexts/MobileContext';
 
 // Helper function for price calculations
 const calculatePrice = (price: number) => {
@@ -46,6 +47,8 @@ export default function PropertyPurchasePage() {
     name?: string;
   } | null>(null);
   
+  const [totalSlots, setTotalSlots] = useState<number>(100); 
+
   // Get wallet connection status
   const { isConnected, address, isCorrectNetwork, switchNetwork } = useWalletStatus();
   
@@ -65,6 +68,9 @@ export default function PropertyPurchasePage() {
   const { approve, checkAllowance, loading: approvalLoading, error: approvalError } = useTokenApproval();
   const [needsApproval, setNeedsApproval] = useState(false);
 
+  // Use the shared mobile context
+  const { isMobile } = useMobile();
+
   // Helper function to parse user balance
   const parseUserBalance = () => {
     if (!balance) return 0;
@@ -78,45 +84,40 @@ export default function PropertyPurchasePage() {
     return slotCount * (calculatePrice(propertyDetails.price) + calculatePrice(propertyDetails.fee));
   };
 
-  // Add responsive state - improve with more breakpoints
-  const [screenSize, setScreenSize] = useState<'xs' | 'sm' | 'md' | 'lg' | 'xl'>('lg');
-  const [isMobile, setIsMobile] = useState(false);
-
-  // Add useEffect for improved responsive detection
   useEffect(() => {
-    const checkScreenSize = () => {
-      const width = window.innerWidth;
-      if (width < 480) {
-        setScreenSize('xs');
-        setIsMobile(true);
-      } else if (width < 768) {
-        setScreenSize('sm');
-        setIsMobile(true);
-      } else if (width < 992) {
-        setScreenSize('md');
-        setIsMobile(false);
-      } else if (width < 1200) {
-        setScreenSize('lg');
-        setIsMobile(false);
-      } else {
-        setScreenSize('xl');
-        setIsMobile(false);
+    const fetchPropertyDetails = async () => {
+      try {
+        const provider = getProvider();
+        const details = await getProperty(provider as ethers.JsonRpcProvider, propertyId);
+        setPropertyDetails({
+          price: details.property.price,
+          fee: details.property.fee,
+          slotContract: details.property.slotContract,
+          status: details.status,
+          name: `Property #${propertyId}`
+        });
+
+        // Get total supply from the slot contract
+        const { getTotalSupply } = await import('../../../../lib/contracts');
+        const totalSupply = await getTotalSupply(provider as ethers.JsonRpcProvider, details.property.slotContract);
+        setTotalSlots(Number(totalSupply));
+      } catch (error) {
+        console.error('Error fetching property details:', error);
       }
     };
-    
-    checkScreenSize();
-    window.addEventListener('resize', checkScreenSize);
-    return () => window.removeEventListener('resize', checkScreenSize);
-  }, []);
 
+    if (propertyId) {
+      fetchPropertyDetails();
+    }
+  }, [propertyId]);
+  
   useEffect(() => {
     const fetchSlots = async () => {
       setLoading(true);
       try {
         const availableSlots = await getMarketplaceAvailableSlots(propertyId);
         
-        const TOTAL = 99;
-        const slotsData = Array.from({ length: TOTAL }, (_, i) => ({ 
+        const slotsData = Array.from({ length: totalSlots }, (_, i) => ({ 
           id: i + 1, 
           isSold: !availableSlots.includes(i + 1) 
         }));
@@ -132,31 +133,7 @@ export default function PropertyPurchasePage() {
     if (propertyId) {
       fetchSlots();
     }
-  }, [propertyId]);
-  
-  useEffect(() => {
-    const fetchPropertyDetails = async () => {
-      try {
-        const provider = getProvider();
-        console.log(provider);
-        
-        const details = await getProperty(provider as ethers.JsonRpcProvider, propertyId);
-        setPropertyDetails({
-          price: details.property.price,
-          fee: details.property.fee,
-          slotContract: details.property.slotContract,
-          status: details.status,
-          name: `Property #${propertyId}`
-        });
-      } catch (error) {
-        console.error('Error fetching property details:', error);
-      }
-    };
-
-    if (propertyId) {
-      fetchPropertyDetails();
-    }
-  }, [propertyId]);
+  }, [propertyId, totalSlots]);
   
   // Reset state when purchase is successful
   useEffect(() => {
@@ -167,8 +144,7 @@ export default function PropertyPurchasePage() {
         const fetchSlotsAfterPurchase = async () => {
           try {
             const availableSlots = await getMarketplaceAvailableSlots(propertyId);
-            const TOTAL = 99;
-            const slotsData = Array.from({ length: TOTAL }, (_, i) => ({ 
+            const slotsData = Array.from({ length: totalSlots }, (_, i) => ({ 
               id: i + 1, 
               isSold: !availableSlots.includes(i + 1) 
             }));
@@ -182,7 +158,7 @@ export default function PropertyPurchasePage() {
         fetchSlotsAfterPurchase();
       }, 2000);
     }
-  }, [purchaseSuccess, propertyId]);
+  }, [purchaseSuccess, propertyId, totalSlots]);
   
   // Handle errors
   useEffect(() => {
@@ -346,86 +322,64 @@ export default function PropertyPurchasePage() {
 
   // Get appropriate property name length based on screen size
   const getPropertyNameMaxLength = () => {
-    switch (screenSize) {
-      case 'xs': return 20;
-      case 'sm': return 25;
-      case 'md': return 35;
-      default: return 50;
-    }
+    return isMobile ? 25 : 50;
   };
 
   // Get responsive padding and spacing values
   const getResponsiveStyles = () => {
-    const styles = {
-      containerPadding: '15px 15px',
-      gridColumns: 'repeat(7, 1fr)',
-      gridGap: '15px',
-      fontSize: '1rem',
-      sidebarWidth: '0 0 600px',
-      imagePaddingRatio: '60%' // Reduced image height for desktop
-    };
-
-    switch (screenSize) {
-      case 'xs':
-        return {
-          ...styles,
-          containerPadding: '15px 10px',
-          gridColumns: 'repeat(5, 1fr)',
-          gridGap: '8px',
-          fontSize: '0.8rem',
-          sidebarWidth: '1',
-          imagePaddingRatio: '75%' // Maintain aspect ratio for mobile
-        };
-      case 'sm':
-        return {
-          ...styles,
-          containerPadding: '20px 15px',
-          gridColumns: 'repeat(6, 1fr)',
-          gridGap: '10px',
-          fontSize: '0.9rem',
-          sidebarWidth: '1',
-          imagePaddingRatio: '75%' // Maintain aspect ratio for mobile
-        };
-      case 'md':
-        return {
-          ...styles,
-          containerPadding: '30px 20px',
-          gridColumns: 'repeat(8, 1fr)',
-          gridGap: '12px',
-          fontSize: '0.95rem',
-          sidebarWidth: '0 0 350px',
-          imagePaddingRatio: '65%' // Slightly reduced for tablet
-        };
-      default:
-        return styles;
+    if (isMobile) {
+      return {
+        containerPadding: '15px 10px',
+        gridColumns: 'repeat(4, 1fr)',
+        gridGap: '12px',
+        fontSize: '0.9rem',
+        sidebarWidth: '100%',
+        imagePaddingRatio: '50%',
+        slotFontSize: '1rem',
+        propertyMaxWidth: '100%',
+      };
+    } else {
+      return {
+        containerPadding: '30px',
+        gridColumns: 'repeat(10, 1fr)',
+        gridGap: '15px',
+        fontSize: '1rem',
+        sidebarWidth: '50%',
+        imagePaddingRatio: '40%',
+        slotFontSize: '0.9rem',
+        propertyMaxWidth: '50%',
+      };
     }
   };
 
   const responsiveStyles = getResponsiveStyles();
 
-  console.log(propertyDetails);
   
   return (
     <>
       <Header title="Purchase Property Slots" />
       <div style={{ 
-        maxWidth: '1200px', 
+        maxWidth: '1400px', // Increased max-width
         margin: '0 auto', 
         padding: responsiveStyles.containerPadding,
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
+        gap: '30px'
       }}>
+        {/* Legend section */}
         <div style={{
           display: 'flex',
           flexDirection: isMobile ? 'column' : 'row',
-          alignItems: isMobile ? 'flex-start' : 'center',
-          justifyContent: 'space-between',
-          marginBottom: isMobile ? '20px' : '40px',
-          gap: isMobile ? '15px' : '0'
+          alignItems: 'center',
+          gap: '20px',
+          padding: '20px',
+          backgroundColor: 'white',
+          borderRadius: '15px',
+          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)'
         }}>
           <div style={{ 
             display: 'flex', 
-            gap: isMobile ? '15px' : '20px', 
+            gap: '20px', 
             alignItems: 'center',
             flexWrap: 'wrap'
           }}>
@@ -437,7 +391,7 @@ export default function PropertyPurchasePage() {
                 opacity: 0.7, 
                 borderRadius: '50%' 
               }}></div>
-              <span style={{ fontSize: isMobile ? '0.9rem' : '1rem' }}>Owned Slot</span>
+              <span style={{ fontSize: responsiveStyles.fontSize }}>Owned Slot</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{ 
@@ -447,7 +401,7 @@ export default function PropertyPurchasePage() {
                 border: '2px solid #4BD16F',
                 borderRadius: '50%' 
               }}></div>
-              <span style={{ fontSize: isMobile ? '0.9rem' : '1rem' }}>Available Slot</span>
+              <span style={{ fontSize: responsiveStyles.fontSize }}>Available Slot</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{ 
@@ -456,7 +410,7 @@ export default function PropertyPurchasePage() {
                 backgroundColor: '#FF9F00',
                 borderRadius: '50%' 
               }}></div>
-              <span style={{ fontSize: isMobile ? '0.9rem' : '1rem' }}>Selected Slot</span>
+              <span style={{ fontSize: responsiveStyles.fontSize }}>Selected Slot</span>
             </div>
           </div>
           
@@ -505,24 +459,27 @@ export default function PropertyPurchasePage() {
         <div style={{ 
           display: 'flex', 
           flexDirection: isMobile ? 'column' : 'row',
-          gap: isMobile ? '20px' : '30px', 
-          maxWidth: '1200px'
+          gap: '30px',
+          width: '100%'
         }}>
           {/* Property information */}
           <div style={{ 
-            flex: responsiveStyles.sidebarWidth,
+            width: isMobile ? '100%' : '50%',
             backgroundColor: '#E8FFF0',
             borderRadius: '15px',
-            padding: isMobile ? '15px' : '20px',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-            order: isMobile ? 2 : 1
+            padding: '24px',
+            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+            order: isMobile ? 2 : 1,
+            alignSelf: 'flex-start',
+            minWidth: isMobile ? 'auto' : '50%'
           }}>
             <div style={{
               position: 'relative',
               width: '100%',
-              paddingBottom: responsiveStyles.imagePaddingRatio, // Use responsive ratio
+              margin: '0 auto',
+              paddingBottom: responsiveStyles.imagePaddingRatio,
               marginBottom: '20px',
-              maxHeight: isMobile ? 'unset' : '300px', // Limit height on desktop
+              maxHeight: isMobile ? 'fit-content' : '300px',
               overflow: 'hidden'
             }}>
               <Image 
@@ -537,7 +494,7 @@ export default function PropertyPurchasePage() {
             </div>
             
             <h2 style={{ 
-              fontSize: screenSize === 'xs' ? '1.2rem' : screenSize === 'sm' ? '1.3rem' : '1.5rem', 
+              fontSize: isMobile ? '1.3rem' : '1.5rem',
               fontWeight: 'bold', 
               marginBottom: '15px',
               textOverflow: 'ellipsis',
@@ -583,7 +540,7 @@ export default function PropertyPurchasePage() {
                 marginBottom: '10px' 
               }}>
                 <span>Total Slots:</span>
-                <span style={{ fontWeight: 'bold' }}>100</span>
+                <span style={{ fontWeight: 'bold' }}>{totalSlots}</span>
               </div>
               
               <div style={{ 
@@ -856,20 +813,20 @@ export default function PropertyPurchasePage() {
           
           {/* Slots grid */}
           <div style={{ 
-            flex: 1,
+            width: isMobile ? '100%' : '50%',
             backgroundColor: 'white',
             borderRadius: '15px',
-            padding: isMobile ? '15px' : '30px',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-            minHeight: isMobile ? 'auto' : '600px',
-            order: isMobile ? 1 : 2
+            padding: '30px',
+            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+            order: isMobile ? 1 : 2,
+            minWidth: isMobile ? 'auto' : '50%'
           }}>
             {loading ? (
               <div style={{ 
                 display: 'flex', 
                 justifyContent: 'center', 
                 alignItems: 'center',
-                height: '100%' 
+                height: '200px'
               }}>
                 <p>Loading slots...</p>
               </div>
@@ -878,7 +835,7 @@ export default function PropertyPurchasePage() {
                 display: 'grid',
                 gridTemplateColumns: responsiveStyles.gridColumns,
                 gap: responsiveStyles.gridGap,
-                maxWidth: '800px',
+                width: '100%',
                 margin: '0 auto'
               }}>
                 {slots.map((slot) => {
@@ -901,9 +858,11 @@ export default function PropertyPurchasePage() {
                         border: (!slot.isSold && !isSelected) ? '2px solid #4BD16F' : 'none',
                         position: 'relative',
                         cursor: slot.isSold ? 'default' : 'pointer',
-                        transition: 'transform 0.2s ease, background-color 0.2s ease',
-                        transform: isSelected ? 'scale(1.1)' : 'scale(1)',
-                        boxShadow: isSelected ? '0 0 10px rgba(255, 159, 0, 0.5)' : 'none'
+                        transition: 'all 0.2s ease',
+                        transform: isSelected ? 'scale(1.05)' : 'scale(1)',
+                        boxShadow: isSelected ? '0 0 10px rgba(255, 159, 0, 0.3)' : 'none',
+                        maxWidth: isMobile ? 'none' : '45px',
+                        margin: '0 auto'
                       }}
                     >
                       <div style={{
@@ -911,8 +870,8 @@ export default function PropertyPurchasePage() {
                         top: '50%',
                         left: '50%',
                         transform: 'translate(-50%, -50%)',
-                        fontSize: isMobile ? '1rem' : '0.75rem',
-                        fontWeight: '600',
+                        fontSize: responsiveStyles.slotFontSize,
+                        fontWeight: '500',
                         color: slot.isSold 
                           ? 'white' 
                           : isSelected 
@@ -937,7 +896,7 @@ export default function PropertyPurchasePage() {
             left: 0,
             right: 0,
             backgroundColor: 'white',
-            padding: screenSize === 'xs' ? '10px' : '15px',
+            padding: '15px',
             boxShadow: '0 -2px 10px rgba(0, 0, 0, 0.1)',
             zIndex: 99
           }}>

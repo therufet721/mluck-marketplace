@@ -45,10 +45,8 @@ export async function getTotalSlots(nftAddress: string): Promise<number> {
   try {
     const provider = getProvider();
     const contract = new ethers.Contract(nftAddress, slotAbi, provider);
-    console.log(contract, "contract");
     
     const totalSupply = await contract.totalSupply();
-    console.log(totalSupply, "totalSuply");
     
     return Number(totalSupply);
   } catch (error) {
@@ -130,7 +128,6 @@ export async function getMarketplaceAvailableSlots(
     const provider = getProvider();                 // BrowserProvider or JSON-RPC
     // Type assertion needed since getContracts can handle both provider types
     const { marketplace } = await getContracts(provider as ethers.JsonRpcProvider);
-    console.log(marketplace,"marketplace = getmarketplaceavailable");
     
     const [property, status, availableSlotsRaw] = 
       await marketplace.getProperty(propertyAddress);
@@ -146,7 +143,6 @@ export async function getMarketplaceAvailableSlots(
     if (availableSlots.length === 0) {
       console.warn('Marketplace returned 0 available slots');
     }
-    console.log('getProperty raw →', { status: Number(status), available: availableSlotsRaw.map(Number) })
 
     return availableSlots;
   } catch (error) {
@@ -163,7 +159,6 @@ export async function getUserOwnedSlots(slotContractAddress: string, userAddress
     
     // Call the ownedBy function on the slot contract
     const ownedSlotsBigInt = await slotContract.ownedBy(userAddress);
-    console.log(ownedSlotsBigInt);
     
     
     // Convert BigInt values to numbers

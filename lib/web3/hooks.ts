@@ -120,14 +120,10 @@ export function useWalletStatus() {
   // Check if connected to correct network
   useEffect(() => {
     const checkNetwork = () => {
-      console.log('Current chainId:', chainId);
-      console.log('Active chain ID:', ACTIVE_CHAIN_ID);
       
       if (chainId === ACTIVE_CHAIN_ID) {
-        console.log('✅ Connected to the correct network (Polygon)');
         setIsCorrectNetwork(true);
       } else {
-        console.log('❌ Not connected to Polygon. Current chain:', chainId);
         setIsCorrectNetwork(false);
       }
     };
@@ -138,7 +134,6 @@ export function useWalletStatus() {
     if (window.ethereum) {
       window.ethereum.on('chainChanged', (newChainId: string) => {
         const newChainIdNumber = parseInt(newChainId, 16);
-        console.log('Chain changed to:', newChainIdNumber);
         if (newChainIdNumber === ACTIVE_CHAIN_ID) {
           setIsCorrectNetwork(true);
         } else {
@@ -572,7 +567,6 @@ export function useNetworkChangeEffect() {
   useEffect(() => {
     if (typeof window !== 'undefined' && window.ethereum) {
       const handleChainChanged = () => {
-        console.log('Network changed, reloading...');
         window.location.reload();
       };
       
@@ -615,11 +609,7 @@ export function useTokenApproval() {
         const checksummedSpender = ethers.getAddress(spenderAddress);
         const checksummedOwner = ethers.getAddress(account);
 
-        console.log('Checksummed addresses:', {
-          checksummedTokenAddress,
-          checksummedSpender,
-          checksummedOwner,
-        });
+       
 
         // Basic ERC20 ABI for approval functions
         const abi = [
@@ -633,7 +623,7 @@ export function useTokenApproval() {
         const decimals = await tokenContract.decimals();
         
         const formattedAllowance = ethers.formatUnits(currentAllowance, decimals);
-        console.log('Current allowance:', formattedAllowance);
+       
         setAllowance(formattedAllowance);
         return formattedAllowance;
       } catch (checksumError: any) {
@@ -681,11 +671,7 @@ export function useTokenApproval() {
         const checksummedTokenAddress = ethers.getAddress(tokenAddress);
         const checksummedSpender = ethers.getAddress(spenderAddress);
 
-        console.log('Checksummed addresses:', {
-          checksummedTokenAddress,
-          checksummedSpender,
-          owner: account
-        });
+       
 
         // Basic ERC20 ABI for approval
         const abi = [
@@ -698,13 +684,11 @@ export function useTokenApproval() {
         
         // Convert amount to proper decimals
         const amountWithDecimals = ethers.parseUnits(amount.toString(), decimals);
-        console.log('Amount with decimals:', amountWithDecimals.toString());
         
         // Send approval transaction
         const tx = await tokenContract.approve(checksummedSpender, amountWithDecimals);
-        console.log('Approval transaction:', tx.hash);
+      
         await tx.wait();
-        console.log('Transaction confirmed');
 
         // Update allowance after approval
         await checkAllowance(checksummedSpender);

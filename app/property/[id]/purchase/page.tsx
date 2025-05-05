@@ -48,6 +48,9 @@ export default function PropertyPurchasePage() {
   } | null>(null);
   
   const [totalSlots, setTotalSlots] = useState<number>(100); 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [slotsPerPage, setSlotsPerPage] = useState<number>(100);
 
   // Get wallet connection status
   const { isConnected, address, isCorrectNetwork, switchNetwork } = useWalletStatus();
@@ -89,6 +92,7 @@ export default function PropertyPurchasePage() {
       try {
         const provider = getProvider();
         const details = await getProperty(provider as ethers.JsonRpcProvider, propertyId);
+        console.log(details);
         setPropertyDetails({
           price: details.property.price,
           fee: details.property.fee,
@@ -297,7 +301,7 @@ export default function PropertyPurchasePage() {
     const currentBalance = parseUserBalance();
     
     if (currentBalance < totalCost) return 'Insufficient Balance';
-    if (needsApproval) return 'Approve BUSD Spending';
+    if (needsApproval) return 'Approve USDT Spending';
     return `Purchase ${selectedSlots.length} Slots`;
   };
 
@@ -325,12 +329,12 @@ export default function PropertyPurchasePage() {
     return isMobile ? 25 : 50;
   };
 
-  // Get responsive padding and spacing values
+  // Helper function to get responsive padding and spacing values
   const getResponsiveStyles = () => {
     if (isMobile) {
       return {
         containerPadding: '15px 10px',
-        gridColumns: 'repeat(4, 1fr)',
+        gridColumns: 'repeat(10, 1fr)',
         gridGap: '12px',
         fontSize: '0.9rem',
         sidebarWidth: '100%',
@@ -342,7 +346,7 @@ export default function PropertyPurchasePage() {
       return {
         containerPadding: '30px',
         gridColumns: 'repeat(10, 1fr)',
-        gridGap: '15px',
+        gridGap: '16px',
         fontSize: '1rem',
         sidebarWidth: '50%',
         imagePaddingRatio: '40%',
@@ -350,6 +354,24 @@ export default function PropertyPurchasePage() {
         propertyMaxWidth: '50%',
       };
     }
+  };
+
+  // Get paginated slots
+  const getPaginatedSlots = () => {
+    const startIndex = (currentPage - 1) * slotsPerPage;
+    const endIndex = Math.min(startIndex + slotsPerPage, slots.length);
+    return slots.slice(startIndex, endIndex);
+  };
+
+  // Get total pages
+  const getTotalPages = () => {
+    return Math.ceil(slots.length / slotsPerPage);
+  };
+
+  // Handle page change
+  const handlePageChange = (page: number) => {
+    if (page < 1 || page > getTotalPages()) return;
+    setCurrentPage(page);
   };
 
   const responsiveStyles = getResponsiveStyles();
@@ -385,31 +407,77 @@ export default function PropertyPurchasePage() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{ 
-                width: '20px', 
-                height: '20px', 
-                backgroundColor: '#4BD16F', 
-                opacity: 0.7, 
-                borderRadius: '50%' 
-              }}></div>
+                width: '36px', 
+                height: '36px',
+                position: 'relative',
+                backgroundImage: `url('/images/BAK-KR1.svg')`,
+                backgroundSize: 'contain',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat'
+              }}>
+                {/* Sold Badge */}
+                <div style={{
+                  position: 'absolute',
+                  bottom: '5%',
+                  right: '5%',
+                  width: '30%',
+                  height: '30%',
+                  borderRadius: '50%',
+                  backgroundColor: '#EF4444',
+                  border: '2px solid white',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                }}></div>
+              </div>
               <span style={{ fontSize: responsiveStyles.fontSize }}>Owned Slot</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{ 
-                width: '20px', 
-                height: '20px', 
-                backgroundColor: 'white',
-                border: '2px solid #4BD16F',
-                borderRadius: '50%' 
-              }}></div>
+                width: '36px', 
+                height: '36px',
+                position: 'relative',
+                backgroundImage: `url('/images/BAK-KR1.svg')`,
+                backgroundSize: 'contain',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat'
+              }}>
+                {/* Available Badge */}
+                <div style={{
+                  position: 'absolute',
+                  bottom: '5%',
+                  right: '5%',
+                  width: '30%',
+                  height: '30%',
+                  borderRadius: '50%',
+                  backgroundColor: '#10B981',
+                  border: '2px solid white',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                }}></div>
+              </div>
               <span style={{ fontSize: responsiveStyles.fontSize }}>Available Slot</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{ 
-                width: '20px', 
-                height: '20px', 
-                backgroundColor: '#FF9F00',
-                borderRadius: '50%' 
-              }}></div>
+                width: '36px', 
+                height: '36px',
+                position: 'relative',
+                backgroundImage: `url('/images/BAK-KR1.svg')`,
+                backgroundSize: 'contain',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat'
+              }}>
+                {/* Selected Badge */}
+                <div style={{
+                  position: 'absolute',
+                  bottom: '5%',
+                  right: '5%',
+                  width: '30%',
+                  height: '30%',
+                  borderRadius: '50%',
+                  backgroundColor: '#FF9F00',
+                  border: '2px solid white',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                }}></div>
+              </div>
               <span style={{ fontSize: responsiveStyles.fontSize }}>Selected Slot</span>
             </div>
           </div>
@@ -511,7 +579,7 @@ export default function PropertyPurchasePage() {
                 marginBottom: '10px' 
               }}>
                 <span>Price per Slot:</span>
-                <span style={{ fontWeight: 'bold' }}>{propertyDetails ? formatPrice(propertyDetails.price) : '...'} BUSD</span>
+                <span style={{ fontWeight: 'bold' }}>{propertyDetails ? formatPrice(propertyDetails.price) : '...'} USDT</span>
               </div>
               
               <div style={{ 
@@ -520,7 +588,7 @@ export default function PropertyPurchasePage() {
                 marginBottom: '10px' 
               }}>
                 <span>Fee per Slot:</span>
-                <span style={{ fontWeight: 'bold' }}>{propertyDetails ? formatPrice(propertyDetails.fee) : '...'} BUSD</span>
+                <span style={{ fontWeight: 'bold' }}>{propertyDetails ? formatPrice(propertyDetails.fee) : '...'} USDT</span>
               </div>
 
               <div style={{ 
@@ -530,7 +598,7 @@ export default function PropertyPurchasePage() {
               }}>
                 <span>Total Cost per Slot:</span>
                 <span style={{ fontWeight: 'bold' }}>
-                  {propertyDetails ? (formatPrice(propertyDetails.price + propertyDetails.fee)) : '...'} BUSD
+                  {propertyDetails ? (formatPrice(propertyDetails.price + propertyDetails.fee)) : '...'} USDT
                 </span>
               </div>
               
@@ -587,13 +655,13 @@ export default function PropertyPurchasePage() {
               }}>
                 <p style={{ marginBottom: '10px', fontWeight: 'bold' }}>Selected Slots: {selectedSlots.length}</p>
                 <p style={{ marginBottom: '5px' }}>
-                  Base Price: {propertyDetails ? formatPrice(propertyDetails.price * selectedSlots.length) : '0'} BUSD
+                  Base Price: {propertyDetails ? formatPrice(propertyDetails.price * selectedSlots.length) : '0'} USDT
                 </p>
                 <p style={{ marginBottom: '5px' }}>
-                  Fees: {propertyDetails ? formatPrice(propertyDetails.fee * selectedSlots.length) : '0'} BUSD
+                  Fees: {propertyDetails ? formatPrice(propertyDetails.fee * selectedSlots.length) : '0'} USDT
                 </p>
                 <p style={{ marginBottom: '10px', fontWeight: 'bold' }}>
-                  Total Cost: {propertyDetails ? formatPrice((propertyDetails.price + propertyDetails.fee) * selectedSlots.length) : '0'} BUSD
+                  Total Cost: {propertyDetails ? formatPrice((propertyDetails.price + propertyDetails.fee) * selectedSlots.length) : '0'} USDT
                 </p>
                 {balance && (
                   <p style={{ 
@@ -604,7 +672,7 @@ export default function PropertyPurchasePage() {
                     Your Balance: {formatBalanceDisplay(balance)}
                     {parseUserBalance() < calculateTotalCost(selectedSlots.length) && (
                       <span style={{ display: 'block', marginTop: '5px', color: '#FFE0E0' }}>
-                        Insufficient balance. Please add more BUSD to cover the purchase and fees.
+                        Insufficient balance. Please add more USDT to cover the purchase and fees.
                       </span>
                     )}
                   </p>
@@ -617,7 +685,7 @@ export default function PropertyPurchasePage() {
                     borderRadius: '5px',
                     marginBottom: '10px'
                   }}>
-                    Approval needed: The marketplace needs your permission to spend BUSD tokens.
+                    Approval needed: The marketplace needs your permission to spend USDT tokens.
                   </p>
                 )}
                 <div style={{ 
@@ -645,8 +713,8 @@ export default function PropertyPurchasePage() {
               }}>
                 <p style={{ marginBottom: '10px', fontWeight: 'bold' }}>Confirm Purchase</p>
                 <p style={{ marginBottom: '5px' }}>
-                  You are about to purchase {selectedSlots.length} slot{selectedSlots.length > 1 ? 's' : ''} for a total of {propertyDetails ? formatPrice((propertyDetails.price + propertyDetails.fee) * selectedSlots.length) : '0'} BUSD
-                  ({propertyDetails ? formatPrice(propertyDetails.price + propertyDetails.fee) : '0'} BUSD per slot).
+                  You are about to purchase {selectedSlots.length} slot{selectedSlots.length > 1 ? 's' : ''} for a total of {propertyDetails ? formatPrice((propertyDetails.price + propertyDetails.fee) * selectedSlots.length) : '0'} USDT
+                  ({propertyDetails ? formatPrice(propertyDetails.price + propertyDetails.fee) : '0'} USDT per slot).
                 </p>
                 <p style={{ fontSize: '0.8rem', marginBottom: '10px' }}>This action cannot be undone.</p>
                 
@@ -821,6 +889,81 @@ export default function PropertyPurchasePage() {
             order: isMobile ? 1 : 2,
             minWidth: isMobile ? 'auto' : '50%'
           }}>
+            {/* Pagination controls - top */}
+            {totalSlots > slotsPerPage && (
+              <div style={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: '10px',
+                marginBottom: '20px'
+              }}>
+                <button
+                  onClick={() => handlePageChange(1)}
+                  disabled={currentPage === 1}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '5px',
+                    backgroundColor: currentPage === 1 ? '#f0f0f0' : '#4BD16F',
+                    color: currentPage === 1 ? '#aaa' : 'white',
+                    border: 'none',
+                    cursor: currentPage === 1 ? 'default' : 'pointer',
+                    fontSize: '0.8rem'
+                  }}
+                >
+                  First
+                </button>
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '5px',
+                    backgroundColor: currentPage === 1 ? '#f0f0f0' : '#4BD16F',
+                    color: currentPage === 1 ? '#aaa' : 'white',
+                    border: 'none',
+                    cursor: currentPage === 1 ? 'default' : 'pointer',
+                    fontSize: '0.8rem'
+                  }}
+                >
+                  Prev
+                </button>
+                <span style={{ fontSize: '0.9rem' }}>
+                  Page {currentPage} of {getTotalPages()}
+                </span>
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === getTotalPages()}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '5px',
+                    backgroundColor: currentPage === getTotalPages() ? '#f0f0f0' : '#4BD16F',
+                    color: currentPage === getTotalPages() ? '#aaa' : 'white',
+                    border: 'none',
+                    cursor: currentPage === getTotalPages() ? 'default' : 'pointer',
+                    fontSize: '0.8rem'
+                  }}
+                >
+                  Next
+                </button>
+                <button
+                  onClick={() => handlePageChange(getTotalPages())}
+                  disabled={currentPage === getTotalPages()}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '5px',
+                    backgroundColor: currentPage === getTotalPages() ? '#f0f0f0' : '#4BD16F',
+                    color: currentPage === getTotalPages() ? '#aaa' : 'white',
+                    border: 'none',
+                    cursor: currentPage === getTotalPages() ? 'default' : 'pointer',
+                    fontSize: '0.8rem'
+                  }}
+                >
+                  Last
+                </button>
+              </div>
+            )}
+            
             {loading ? (
               <div style={{ 
                 display: 'flex', 
@@ -838,7 +981,7 @@ export default function PropertyPurchasePage() {
                 width: '100%',
                 margin: '0 auto'
               }}>
-                {slots.map((slot) => {
+                {getPaginatedSlots().map((slot) => {
                   const isSelected = selectedSlots.includes(slot.id);
                   
                   return (
@@ -846,43 +989,130 @@ export default function PropertyPurchasePage() {
                       key={slot.id}
                       onClick={() => handleSlotClick(slot.id, slot.isSold)}
                       style={{ 
+                        position: 'relative',
                         width: '100%',
                         paddingBottom: '100%',
-                        borderRadius: '50%',
-                        backgroundColor: slot.isSold 
-                          ? '#4BD16F' 
-                          : isSelected 
-                            ? '#FF9F00' 
-                            : 'white',
-                        opacity: slot.isSold ? 0.7 : 1,
-                        border: (!slot.isSold && !isSelected) ? '2px solid #4BD16F' : 'none',
-                        position: 'relative',
                         cursor: slot.isSold ? 'default' : 'pointer',
                         transition: 'all 0.2s ease',
                         transform: isSelected ? 'scale(1.05)' : 'scale(1)',
                         boxShadow: isSelected ? '0 0 10px rgba(255, 159, 0, 0.3)' : 'none',
-                        maxWidth: isMobile ? 'none' : '45px',
+                        maxWidth: 'none', 
                         margin: '0 auto'
                       }}
                     >
-                      <div style={{
-                        position: 'absolute',
-                        top: '50%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        fontSize: responsiveStyles.slotFontSize,
-                        fontWeight: '500',
-                        color: slot.isSold 
-                          ? 'white' 
-                          : isSelected 
-                            ? 'white' 
-                            : '#4BD16F'
-                      }}>
-                        {slot.id}
-                      </div>
+                      {/* SVG Background with natural color */}
+                      <div 
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          backgroundImage: `url('/images/BAK-KR1.svg')`,
+                          backgroundSize: 'contain',
+                          backgroundPosition: 'center',
+                          backgroundRepeat: 'no-repeat',
+                          /* Removed filters - all SVGs appear in natural color */
+                        }}
+                      />
+                      
+                      {/* Status Badge */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          bottom: '5%',
+                          right: '5%',
+                          width: '30%',
+                          height: '30%',
+                          borderRadius: '50%',
+                          backgroundColor: slot.isSold 
+                            ? '#EF4444' // Red for sold
+                            : isSelected 
+                              ? '#FF9F00' // Orange for selected
+                              : '#10B981', // Green for available
+                          border: '2px solid white',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                          zIndex: 2
+                        }}
+                      />
                     </div>
                   );
                 })}
+              </div>
+            )}
+            
+            {/* Pagination controls - bottom */}
+            {totalSlots > slotsPerPage && (
+              <div style={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: '10px',
+                marginTop: '20px'
+              }}>
+                <button
+                  onClick={() => handlePageChange(1)}
+                  disabled={currentPage === 1}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '5px',
+                    backgroundColor: currentPage === 1 ? '#f0f0f0' : '#4BD16F',
+                    color: currentPage === 1 ? '#aaa' : 'white',
+                    border: 'none',
+                    cursor: currentPage === 1 ? 'default' : 'pointer',
+                    fontSize: '0.8rem'
+                  }}
+                >
+                  First
+                </button>
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '5px',
+                    backgroundColor: currentPage === 1 ? '#f0f0f0' : '#4BD16F',
+                    color: currentPage === 1 ? '#aaa' : 'white',
+                    border: 'none',
+                    cursor: currentPage === 1 ? 'default' : 'pointer',
+                    fontSize: '0.8rem'
+                  }}
+                >
+                  Prev
+                </button>
+                <span style={{ fontSize: '0.9rem' }}>
+                  Page {currentPage} of {getTotalPages()}
+                </span>
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === getTotalPages()}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '5px',
+                    backgroundColor: currentPage === getTotalPages() ? '#f0f0f0' : '#4BD16F',
+                    color: currentPage === getTotalPages() ? '#aaa' : 'white',
+                    border: 'none',
+                    cursor: currentPage === getTotalPages() ? 'default' : 'pointer',
+                    fontSize: '0.8rem'
+                  }}
+                >
+                  Next
+                </button>
+                <button
+                  onClick={() => handlePageChange(getTotalPages())}
+                  disabled={currentPage === getTotalPages()}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '5px',
+                    backgroundColor: currentPage === getTotalPages() ? '#f0f0f0' : '#4BD16F',
+                    color: currentPage === getTotalPages() ? '#aaa' : 'white',
+                    border: 'none',
+                    cursor: currentPage === getTotalPages() ? 'default' : 'pointer',
+                    fontSize: '0.8rem'
+                  }}
+                >
+                  Last
+                </button>
               </div>
             )}
           </div>
@@ -911,7 +1141,7 @@ export default function PropertyPurchasePage() {
                   {selectedSlots.length} Slot{selectedSlots.length > 1 ? 's' : ''} Selected
                 </div>
                 <div style={{ fontSize: '0.9rem', color: '#666' }}>
-                  Total: {propertyDetails ? formatPrice((propertyDetails.price + propertyDetails.fee) * selectedSlots.length) : '0'} BUSD
+                  Total: {propertyDetails ? formatPrice((propertyDetails.price + propertyDetails.fee) * selectedSlots.length) : '0'} USDT
                 </div>
               </div>
               <button 

@@ -17,10 +17,20 @@ const PropertiesContext = createContext<PropertiesContextProps | undefined>(unde
 // Define the API URL (consider moving this to a config file)
 const API_URL = 'https://chain.mluck.io';
 
+// Determine environment
+const isProd = process.env.NEXT_PUBLIC_ENVIRONMENT === 'production';
+
+// BSC (production) and Polygon (test) chain IDs
+const BSC_CHAIN_ID = 56;
+const POLYGON_CHAIN_ID = 137;
+
 // Function to fetch properties data from the API
 async function fetchPropertiesData(): Promise<Property[]> {
   try {
-    const response = await fetch(`${API_URL}/api/v1/asset/properties`);
+    // Set chain_id parameter based on environment
+    const chainId = isProd ? BSC_CHAIN_ID : POLYGON_CHAIN_ID;
+    const response = await fetch(`${API_URL}/api/v1/asset/properties?chain_id=${chainId}`);
+    
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
     }

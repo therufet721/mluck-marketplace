@@ -3,9 +3,27 @@ import { Property } from '../types';
 // This would be replaced with actual API calls to your backend
 const API_URL = 'https://chain.mluck.io';
 
-export async function getProperties(): Promise<Property[]> {
+// Determine environment
+const isProd = process.env.NEXT_PUBLIC_ENVIRONMENT === 'production';
+
+// Chain IDs
+const BSC_CHAIN_ID = 56;
+const POLYGON_CHAIN_ID = 137;
+
+// Get the current chain ID based on environment
+const getChainId = () => isProd ? BSC_CHAIN_ID : POLYGON_CHAIN_ID;
+
+export async function getProperties(city?: string): Promise<Property[]> {
   try {
-    const response = await fetch(`${API_URL}/api/v1/asset/properties`);
+    const chainId = getChainId();
+    let url = `${API_URL}/api/v1/asset/properties?chain_id=${chainId}`;
+    
+    // Add city filter parameter if provided
+    if (city && city !== 'All') {
+      url += `&city=${encodeURIComponent(city)}`;
+    }
+    
+    const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
     }
@@ -34,7 +52,8 @@ export async function getPropertyById(id: string): Promise<Property | null> {
 
 export async function getClaimableAssets(holderAddress: string): Promise<any> {
   try {
-    const response = await fetch(`${API_URL}/api/v1/asset/claimable/${holderAddress}`);
+    const chainId = getChainId();
+    const response = await fetch(`${API_URL}/api/v1/asset/claimable/${holderAddress}?chain_id=${chainId}`);
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
     }
@@ -49,7 +68,8 @@ export async function getClaimableAssets(holderAddress: string): Promise<any> {
 
 export async function getClaimHistory(accountAddress: string, signature: string): Promise<any> {
   try {
-    const response = await fetch(`${API_URL}/api/v1/asset/claim-history/${accountAddress}`, {
+    const chainId = getChainId();
+    const response = await fetch(`${API_URL}/api/v1/asset/claim-history/${accountAddress}?chain_id=${chainId}`, {
       headers: {
         'Authorization': `Bearer ${signature}`
       }
@@ -69,9 +89,10 @@ export async function getClaimHistory(accountAddress: string, signature: string)
 
 export async function claimAsset(property: string, signature: string): Promise<any> {
   try {
+    const chainId = getChainId();
     const message = JSON.stringify({ property });
     
-    const response = await fetch(`${API_URL}/api/v1/asset/claim`, {
+    const response = await fetch(`${API_URL}/api/v1/asset/claim?chain_id=${chainId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -95,9 +116,10 @@ export async function claimAsset(property: string, signature: string): Promise<a
 
 export async function claimAllAssets(holderAddress: string, signature: string): Promise<any> {
   try {
+    const chainId = getChainId();
     const message = JSON.stringify({ holder: holderAddress });
     
-    const response = await fetch(`${API_URL}/api/v1/asset/claimall`, {
+    const response = await fetch(`${API_URL}/api/v1/asset/claimall?chain_id=${chainId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -121,7 +143,8 @@ export async function claimAllAssets(holderAddress: string, signature: string): 
 
 export async function getPropertySlots(propertyAddress: string): Promise<any> {
   try {
-    const response = await fetch(`${API_URL}/api/v1/asset/${propertyAddress}/slots`);
+    const chainId = getChainId();
+    const response = await fetch(`${API_URL}/api/v1/asset/${propertyAddress}/slots?chain_id=${chainId}`);
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
     }

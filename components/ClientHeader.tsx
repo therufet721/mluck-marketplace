@@ -13,7 +13,7 @@ type ClientHeaderProps = {
 
 export default function ClientHeader({ title = 'Dashboard' }: ClientHeaderProps) {
   const { balance, loading } = useTokenBalance();
-  const { isCorrectNetwork, switchNetwork } = useWalletStatus();
+  const { isCorrectNetwork, connectedChain } = useWalletStatus();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { isMobile } = useMobile();
 
@@ -117,54 +117,37 @@ export default function ClientHeader({ title = 'Dashboard' }: ClientHeaderProps)
             </div>
 
             {/* Network Badge */}
-            <div style={{ 
-              background: isCorrectNetwork ? 'rgba(77, 209, 111, 0.2)' : 'rgba(255, 159, 0, 0.2)', 
-              color: 'white',
-              padding: '12px', 
-              borderRadius: '12px',
-              fontSize: '14px',
-              fontWeight: '600',
-              marginBottom: '15px',
-              boxShadow: isCorrectNetwork 
-                ? '0 2px 6px rgba(77, 209, 111, 0.3)'
-                : '0 2px 6px rgba(255, 159, 0, 0.3)'
-            }}>
+            {connectedChain && (
               <div style={{ 
-                display: 'flex',
-                alignItems: 'center',
-                marginBottom: isCorrectNetwork ? 0 : '10px'
+                background: isCorrectNetwork ? 'rgba(77, 209, 111, 0.2)' : 'rgba(255, 159, 0, 0.2)', 
+                color: 'white',
+                padding: '12px', 
+                borderRadius: '12px',
+                fontSize: '14px',
+                fontWeight: '600',
+                marginBottom: '15px',
+                boxShadow: isCorrectNetwork 
+                  ? '0 2px 6px rgba(77, 209, 111, 0.3)'
+                  : '0 2px 6px rgba(255, 159, 0, 0.3)'
               }}>
                 <div style={{ 
-                  width: '8px', 
-                  height: '8px', 
-                  backgroundColor: isCorrectNetwork ? '#4BD16F' : '#FF9F00', 
-                  borderRadius: '50%',
-                  marginRight: '8px',
-                  boxShadow: isCorrectNetwork 
-                    ? '0 0 5px rgba(77, 209, 111, 0.8)'
-                    : '0 0 5px rgba(255, 159, 0, 0.8)'
-                }}/>
-                {isCorrectNetwork ? 'Polygon' : 'Wrong Network'}
+                  display: 'flex',
+                  alignItems: 'center'
+                }}>
+                  <div style={{ 
+                    width: '8px', 
+                    height: '8px', 
+                    backgroundColor: isCorrectNetwork ? '#4BD16F' : '#FF9F00', 
+                    borderRadius: '50%',
+                    marginRight: '8px',
+                    boxShadow: isCorrectNetwork 
+                      ? '0 0 5px rgba(77, 209, 111, 0.8)'
+                      : '0 0 5px rgba(255, 159, 0, 0.8)'
+                  }}/>
+                  {connectedChain}
+                </div>
               </div>
-              {!isCorrectNetwork && (
-                <button 
-                  onClick={switchNetwork}
-                  style={{
-                    backgroundColor: '#FF9F00',
-                    color: 'white',
-                    border: 'none',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    width: '100%',
-                    marginTop: '8px'
-                  }}
-                >
-                  Switch to Polygon
-                </button>
-              )}
-            </div>
+            )}
 
             {/* User Balance */}
             <div style={{ 
@@ -300,54 +283,35 @@ export default function ClientHeader({ title = 'Dashboard' }: ClientHeaderProps)
                 </div>
 
                 {/* Network Badge */}
-                <div style={{ 
-                  background: isCorrectNetwork ? 'rgba(77, 209, 111, 0.2)' : 'rgba(255, 159, 0, 0.2)', 
-                  color: 'white',
-                  padding: '6px 12px', 
-                  borderRadius: '12px',
-                  marginRight: '10px',
-                  fontSize: '12px',
-                  fontWeight: '600',
-                  display: 'flex',
-                  alignItems: 'center',
-                  minWidth: '120px',
-                  boxShadow: isCorrectNetwork 
-                    ? '0 2px 6px rgba(77, 209, 111, 0.3)'
-                    : '0 2px 6px rgba(255, 159, 0, 0.3)'
-                }}>
+                {connectedChain && (
                   <div style={{ 
-                    width: '8px', 
-                    height: '8px', 
-                    backgroundColor: isCorrectNetwork ? '#4BD16F' : '#FF9F00', 
-                    borderRadius: '50%',
-                    marginRight: '8px',
+                    background: isCorrectNetwork ? 'rgba(77, 209, 111, 0.2)' : 'rgba(255, 159, 0, 0.2)', 
+                    color: 'white',
+                    padding: '6px 12px', 
+                    borderRadius: '12px',
+                    marginRight: '10px',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    display: 'flex',
+                    alignItems: 'center',
+                    minWidth: '120px',
                     boxShadow: isCorrectNetwork 
-                      ? '0 0 5px rgba(77, 209, 111, 0.8)'
-                      : '0 0 5px rgba(255, 159, 0, 0.8)'
-                  }}/>
-                  {isCorrectNetwork 
-                    ? <div>Polygon</div>
-                    : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <span>Wrong Network</span>
-                        <button 
-                          onClick={switchNetwork}
-                          style={{
-                            backgroundColor: '#FF9F00',
-                            color: 'white',
-                            border: 'none',
-                            padding: '2px 5px',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '10px'
-                          }}
-                        >
-                          Switch to Polygon
-                        </button>
-                      </div>
-                    )
-                  }
-                </div>
+                      ? '0 2px 6px rgba(77, 209, 111, 0.3)'
+                      : '0 2px 6px rgba(255, 159, 0, 0.3)'
+                  }}>
+                    <div style={{ 
+                      width: '8px', 
+                      height: '8px', 
+                      backgroundColor: isCorrectNetwork ? '#4BD16F' : '#FF9F00', 
+                      borderRadius: '50%',
+                      marginRight: '8px',
+                      boxShadow: isCorrectNetwork 
+                        ? '0 0 5px rgba(77, 209, 111, 0.8)'
+                        : '0 0 5px rgba(255, 159, 0, 0.8)'
+                    }}/>
+                    {connectedChain}
+                  </div>
+                )}
 
                 {/* User Balance */}
                 <div style={{ 

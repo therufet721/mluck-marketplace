@@ -7,8 +7,12 @@ export function getProvider() {
   if (typeof window !== 'undefined' && window.ethereum) {
     return new ethers.BrowserProvider(window.ethereum);
   }
-  // Fallback to a public provider (read-only)
-  return new ethers.JsonRpcProvider('https://polygon-rpc.com/');
+  // Fallback to a public provider based on environment
+  const isProd = process.env.NEXT_PUBLIC_ENVIRONMENT === 'production';
+  return new ethers.JsonRpcProvider(isProd 
+    ? 'https://bsc-dataseed.binance.org/' 
+    : 'https://polygon-rpc.com/'
+  );
 }
 
 // Get the owner of a slot

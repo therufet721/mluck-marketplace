@@ -13,7 +13,9 @@ function getChecksummedAddress(address: string) {
 
 // Get marketplace address from environment variable
 const MARKETPLACE_ADDRESS = process.env.NEXT_PUBLIC_MARKETPLACE_ADDRESS;
-
+const env = process.env.NEXT_PUBLIC_ENVIRONMENT;
+console.log("MARKETPLACE_ADDRESS:", MARKETPLACE_ADDRESS);
+console.log("ENV:", env);
 if (!MARKETPLACE_ADDRESS) {
   throw new Error('Marketplace address environment variable is not set');
 }

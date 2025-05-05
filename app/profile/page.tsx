@@ -13,6 +13,15 @@ function SimplePropertyCard({ property, userAddress }: { property: Property, use
   const [ownedSlots, setOwnedSlots] = useState<number[]>([])
   const [loading, setLoading] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
+  const [flippedSlots, setFlippedSlots] = useState<Record<number, boolean>>({})
+  
+  // Toggle flip state for a slot
+  const toggleFlip = (slotId: number) => {
+    setFlippedSlots(prev => ({
+      ...prev,
+      [slotId]: !prev[slotId]
+    }))
+  }
   
   useEffect(() => {
     // Handle responsive layout
@@ -99,7 +108,9 @@ function SimplePropertyCard({ property, userAddress }: { property: Property, use
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '0.85rem', color: '#666' }}>Asset valuation:</span>
-            <span style={{ fontSize: '0.85rem', fontWeight: '500' }}>${property.price}</span>
+            <span style={{ fontSize: '0.85rem', fontWeight: '500' }}>
+              ${!loading && property.price ? (Number(property.price) * ownedSlots.length).toFixed(2) : '...'}
+            </span>
           </div>
           
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -119,19 +130,82 @@ function SimplePropertyCard({ property, userAddress }: { property: Property, use
                   <div 
                     key={slotId}
                     style={{
-                      width: '25px',
-                      height: '25px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      borderRadius: '50%',
-                      backgroundColor: '#4BD16F',
-                      color: 'white',
-                      fontWeight: 'bold',
-                      fontSize: '11px'
+                      position: 'relative',
+                      width: '40px',
+                      height: '60px',
+                      marginBottom: '8px',
+                      perspective: '1000px',
+                      cursor: 'pointer'
                     }}
+                    onClick={() => toggleFlip(slotId)}
                   >
-                    {slotId}
+                    {/* Flip container */}
+                    <div
+                      style={{
+                        position: 'relative',
+                        width: '100%',
+                        height: '40px',
+                        transformStyle: 'preserve-3d',
+                        transition: 'transform 0.6s',
+                        transform: flippedSlots[slotId] ? 'rotateY(180deg)' : 'rotateY(0deg)'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isMobile) {
+                          e.currentTarget.style.transform = 'rotateY(180deg)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isMobile && !flippedSlots[slotId]) {
+                          e.currentTarget.style.transform = 'rotateY(0deg)';
+                        }
+                      }}
+                    >
+                      {/* Front side - SVG */}
+                      <div 
+                        style={{
+                          position: 'absolute',
+                          width: '100%',
+                          height: '100%',
+                          backfaceVisibility: 'hidden',
+                          backgroundImage: `url('/images/BAK-KR1.svg')`,
+                          backgroundSize: 'contain',
+                          backgroundPosition: 'center',
+                          backgroundRepeat: 'no-repeat'
+                        }}
+                      />
+                      
+                      {/* Back side - ID Number */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          width: '100%',
+                          height: '100%',
+                          backfaceVisibility: 'hidden',
+                          transform: 'rotateY(180deg)',
+                          backgroundImage: `url('/images/BAK-KR1.svg')`,
+                          backgroundSize: 'contain',
+                          backgroundPosition: 'center',
+                          backgroundRepeat: 'no-repeat',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <div
+                          style={{
+                            backgroundColor: 'transparent',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            color: 'black',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                          }}
+                        >
+                          {slotId}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -154,21 +228,28 @@ function SimplePropertyCard({ property, userAddress }: { property: Property, use
           <div style={{ fontSize: '0.75rem', color: '#666', marginBottom: '5px' }}>
             Accumulated Income:
           </div>
-          <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#333', marginBottom: '10px' }}>
-            2.87 USDT
+          <div style={{ 
+            fontSize: '0.9rem', 
+            fontWeight: 'bold', 
+            color: '#333', 
+            marginBottom: '10px',
+            filter: 'blur(4px)',
+            userSelect: 'none'
+          }}>
+            0.00 USDT
           </div>
-          <button style={{ 
-            backgroundColor: '#4BD16F', 
-            color: 'white', 
+          <div style={{ 
+            backgroundColor: '#f0f0f0', 
+            color: '#999', 
             border: 'none',
             borderRadius: '20px',
             padding: '5px 15px',
             fontSize: '0.85rem',
             fontWeight: '500',
-            cursor: 'pointer'
+            cursor: 'not-allowed'
           }}>
-            Claim
-          </button>
+            Coming Soon
+          </div>
         </div>
       </div>
     </div>

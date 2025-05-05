@@ -8,20 +8,80 @@ import { ADDRESSES } from '../contracts'
 import { useContracts } from '../hooks/useContracts'
 import { marketplaceAbi } from '../abi'
 
-// BSC Testnet Chain ID
+// Chain IDs
 const BSC_TESTNET_CHAIN_ID = 97;
+const BSC_MAINNET_CHAIN_ID = 56;
 const POLYGON_CHAIN_ID = 137;
 const POLYGON_MUMBAI_CHAIN_ID = 80001;
 
-// Set the active network - change to POLYGON_CHAIN_ID for mainnet or POLYGON_MUMBAI_CHAIN_ID for testnet
-const ACTIVE_CHAIN_ID = POLYGON_CHAIN_ID;
+// Determine environment
+const isProd = process.env.NEXT_PUBLIC_ENVIRONMENT === 'production';
 
-// Function to switch to Polygon network
-async function switchToPolygon() {
+// Set the active network based on environment
+const ACTIVE_CHAIN_ID = isProd ? BSC_MAINNET_CHAIN_ID : POLYGON_CHAIN_ID;
+
+// Function to get chain configuration
+function getChainConfig(chainId: number) {
+  switch(chainId) {
+    case BSC_MAINNET_CHAIN_ID:
+      return {
+        chainId: '0x38', // 56 in hex
+        chainName: 'BNB Smart Chain',
+        nativeCurrency: {
+          name: 'BNB',
+          symbol: 'BNB',
+          decimals: 18,
+        },
+        rpcUrls: ['https://bsc-dataseed.binance.org/'],
+        blockExplorerUrls: ['https://bscscan.com/'],
+      };
+    case POLYGON_CHAIN_ID:
+      return {
+        chainId: '0x89', // 137 in hex
+        chainName: 'Polygon Mainnet',
+        nativeCurrency: {
+          name: 'MATIC',
+          symbol: 'MATIC',
+          decimals: 18,
+        },
+        rpcUrls: ['https://polygon-rpc.com/'],
+        blockExplorerUrls: ['https://polygonscan.com/'],
+      };
+    case POLYGON_MUMBAI_CHAIN_ID:
+      return {
+        chainId: '0x13881', // 80001 in hex
+        chainName: 'Polygon Mumbai Testnet',
+        nativeCurrency: {
+          name: 'MATIC',
+          symbol: 'MATIC',
+          decimals: 18,
+        },
+        rpcUrls: ['https://rpc-mumbai.maticvigil.com/'],
+        blockExplorerUrls: ['https://mumbai.polygonscan.com/'],
+      };
+    case BSC_TESTNET_CHAIN_ID:
+      return {
+        chainId: '0x61', // 97 in hex
+        chainName: 'BNB Smart Chain Testnet',
+        nativeCurrency: {
+          name: 'tBNB',
+          symbol: 'tBNB',
+          decimals: 18,
+        },
+        rpcUrls: ['https://data-seed-prebsc-1-s1.binance.org:8545/'],
+        blockExplorerUrls: ['https://testnet.bscscan.com/'],
+      };
+    default:
+      throw new Error(`Chain ID ${chainId} not supported`);
+  }
+}
+
+// Function to switch to the correct network based on environment
+async function switchToCorrectNetwork() {
   if (!window.ethereum) return false;
   
   try {
-    // Try to switch to Polygon
+    // Try to switch to the correct network
     await window.ethereum.request({
       method: 'wallet_switchEthereumChain',
       params: [{ chainId: `0x${ACTIVE_CHAIN_ID.toString(16)}` }],
@@ -33,81 +93,15 @@ async function switchToPolygon() {
       try {
         await window.ethereum.request({
           method: 'wallet_addEthereumChain',
-          params: [
-            ACTIVE_CHAIN_ID === POLYGON_CHAIN_ID 
-              ? {
-                  chainId: '0x89', // 137 in hex
-                  chainName: 'Polygon Mainnet',
-                  nativeCurrency: {
-                    name: 'MATIC',
-                    symbol: 'MATIC',
-                    decimals: 18,
-                  },
-                  rpcUrls: ['https://polygon-rpc.com/'],
-                  blockExplorerUrls: ['https://polygonscan.com/'],
-                }
-              : {
-                  chainId: '0x13881', // 80001 in hex
-                  chainName: 'Polygon Mumbai Testnet',
-                  nativeCurrency: {
-                    name: 'MATIC',
-                    symbol: 'MATIC',
-                    decimals: 18,
-                  },
-                  rpcUrls: ['https://rpc-mumbai.maticvigil.com/'],
-                  blockExplorerUrls: ['https://mumbai.polygonscan.com/'],
-                },
-          ],
+          params: [getChainConfig(ACTIVE_CHAIN_ID)],
         });
         return true;
       } catch (addError) {
-        console.error('Error adding Polygon network:', addError);
+        console.error(`Error adding ${isProd ? 'BNB Chain' : 'Polygon'} network:`, addError);
         return false;
       }
     }
-    console.error('Error switching to Polygon network:', switchError);
-    return false;
-  }
-}
-
-// Function to switch to BSC Testnet - Keep for reference if needed later
-async function switchToBscTestnet() {
-  if (!window.ethereum) return false;
-  
-  try {
-    // Try to switch to BSC Testnet
-    await window.ethereum.request({
-      method: 'wallet_switchEthereumChain',
-      params: [{ chainId: '0x61' }], // 0x61 is 97 in hex
-    });
-    return true;
-  } catch (switchError: any) {
-    // This error code indicates that the chain has not been added to MetaMask
-    if (switchError.code === 4902) {
-      try {
-        await window.ethereum.request({
-          method: 'wallet_addEthereumChain',
-          params: [
-            {
-              chainId: '0x61',
-              chainName: 'BNB Smart Chain Testnet',
-              nativeCurrency: {
-                name: 'tBNB',
-                symbol: 'tBNB',
-                decimals: 18,
-              },
-              rpcUrls: ['https://data-seed-prebsc-1-s1.binance.org:8545/'],
-              blockExplorerUrls: ['https://testnet.bscscan.com/'],
-            },
-          ],
-        });
-        return true;
-      } catch (addError) {
-        console.error('Error adding BSC Testnet:', addError);
-        return false;
-      }
-    }
-    console.error('Error switching to BSC Testnet:', switchError);
+    console.error(`Error switching to ${isProd ? 'BNB Chain' : 'Polygon'} network:`, switchError);
     return false;
   }
 }
@@ -116,15 +110,32 @@ async function switchToBscTestnet() {
 export function useWalletStatus() {
   const { account, isConnected, connectWallet, chainId } = useContracts()
   const [isCorrectNetwork, setIsCorrectNetwork] = useState(false)
+  const [connectedChain, setConnectedChain] = useState<string | null>(null)
   
-  // Check if connected to correct network
+  // Check if connected to correct network and set chain name
   useEffect(() => {
     const checkNetwork = () => {
-      
       if (chainId === ACTIVE_CHAIN_ID) {
         setIsCorrectNetwork(true);
       } else {
         setIsCorrectNetwork(false);
+      }
+
+      // Set the connected chain name based on chainId
+      if (chainId) {
+        if (chainId === BSC_MAINNET_CHAIN_ID) {
+          setConnectedChain('BSC');
+        } else if (chainId === BSC_TESTNET_CHAIN_ID) {
+          setConnectedChain('BSC Testnet');
+        } else if (chainId === POLYGON_CHAIN_ID) {
+          setConnectedChain('Polygon');
+        } else if (chainId === POLYGON_MUMBAI_CHAIN_ID) {
+          setConnectedChain('Polygon Mumbai');
+        } else {
+          setConnectedChain(`Chain ID: ${chainId}`);
+        }
+      } else {
+        setConnectedChain(null);
       }
     };
 
@@ -138,6 +149,19 @@ export function useWalletStatus() {
           setIsCorrectNetwork(true);
         } else {
           setIsCorrectNetwork(false);
+        }
+        
+        // Update chain name on change
+        if (newChainIdNumber === BSC_MAINNET_CHAIN_ID) {
+          setConnectedChain('BSC');
+        } else if (newChainIdNumber === BSC_TESTNET_CHAIN_ID) {
+          setConnectedChain('BSC Testnet');
+        } else if (newChainIdNumber === POLYGON_CHAIN_ID) {
+          setConnectedChain('Polygon');
+        } else if (newChainIdNumber === POLYGON_MUMBAI_CHAIN_ID) {
+          setConnectedChain('Polygon Mumbai');
+        } else {
+          setConnectedChain(`Chain ID: ${newChainIdNumber}`);
         }
       });
     }
@@ -153,16 +177,18 @@ export function useWalletStatus() {
   const handleConnect = useCallback(async () => {
     const connected = await connectWallet()
     if (connected && chainId !== ACTIVE_CHAIN_ID) {
-      await switchToPolygon()
+      await switchToCorrectNetwork()
     }
     return connected
   }, [connectWallet, chainId])
   
   // Function to switch to the correct network
   const switchNetwork = useCallback(async () => {
-    const success = await switchToPolygon();
+    const success = await switchToCorrectNetwork();
     if (success) {
       setIsCorrectNetwork(true);
+      // Set the correct chain name after switch
+      setConnectedChain(isProd ? 'BSC' : 'Polygon');
     }
     return success;
   }, [])
@@ -173,7 +199,8 @@ export function useWalletStatus() {
     isCorrectNetwork,
     connect: handleConnect,
     switchNetwork,
-    chainId
+    chainId,
+    connectedChain
   }
 }
 

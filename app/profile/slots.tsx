@@ -69,19 +69,48 @@ export default function OwnedSlots({ propertyAddress, slotContractAddress }: Own
           <div 
             key={slotId}
             style={{
-              width: '40px',
-              height: '40px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: '50%',
-              backgroundColor: '#4BD16F',
-              color: 'white',
-              fontWeight: 'bold',
-              fontSize: '14px'
+              position: 'relative',
+              width: '50px',
+              height: '50px'
             }}
           >
-            {slotId}
+            {/* SVG Background */}
+            <div 
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundImage: `url('/images/BAK-KR1.svg')`,
+                backgroundSize: 'contain',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat'
+              }}
+            />
+            
+            {/* ID Badge */}
+            <div
+              style={{
+                position: 'absolute',
+                bottom: '2px',
+                right: '2px',
+                width: '25px',
+                height: '25px',
+                borderRadius: '50%',
+                backgroundColor: '#4BD16F',
+                border: '1.5px solid white',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '12px',
+                color: 'white',
+                fontWeight: 'bold'
+              }}
+            >
+              {slotId}
+            </div>
           </div>
         ))}
       </div>

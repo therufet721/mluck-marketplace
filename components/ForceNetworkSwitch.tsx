@@ -3,6 +3,11 @@
 import React from 'react';
 import { useWalletStatus } from '../lib/web3/hooks';
 
+// Determine environment
+const isProd = process.env.NEXT_PUBLIC_ENVIRONMENT === 'production';
+const networkName = isProd ? 'BNB Smart Chain' : 'Polygon Network';
+const networkChainId = isProd ? 56 : 137;
+
 export default function ForceNetworkSwitch() {
   const { isConnected, isCorrectNetwork, switchNetwork, chainId } = useWalletStatus();
   
@@ -45,7 +50,7 @@ export default function ForceNetworkSwitch() {
       
       <div style={{ marginBottom: '20px', fontSize: '14px', lineHeight: '1.6' }}>
         <p>You are currently connected to <b>chain ID: {chainId}</b></p>
-        <p>This application requires <b>Polygon Network (chain ID: 137)</b></p>
+        <p>This application requires <b>{networkName} (chain ID: {networkChainId})</b></p>
         <p style={{ marginTop: '10px' }}>Please switch your network to continue.</p>
       </div>
       
@@ -72,11 +77,11 @@ export default function ForceNetworkSwitch() {
           e.currentTarget.style.transform = 'scale(1)';
         }}
       >
-        Switch to Polygon Network
+        Switch to {networkName}
       </button>
       
       <div style={{ marginTop: '15px', fontSize: '12px', opacity: 0.8 }}>
-        <p>If switching doesn't work, please manually select Polygon in your wallet</p>
+        <p>If switching doesn't work, please manually select {networkName} in your wallet</p>
       </div>
     </div>
   );

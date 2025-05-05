@@ -25,18 +25,21 @@ export function useContracts() {
 
       if (typeof window !== 'undefined' && window.ethereum) {
         try {
-          const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-          const ethersProvider = new ethers.BrowserProvider(window.ethereum);
-          const ethersSigner = await ethersProvider.getSigner();
-          const network = await ethersProvider.getNetwork();
+          // Only check if already connected, don't request connection
+          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+          if (accounts.length > 0) {
+            const ethersProvider = new ethers.BrowserProvider(window.ethereum);
+            const ethersSigner = await ethersProvider.getSigner();
+            const network = await ethersProvider.getNetwork();
 
-          setProvider(ethersProvider);
-          setSigner(ethersSigner);
-          setAccount(accounts[0]);
-          setChainId(Number(network.chainId));
-          setIsConnected(true);
+            setProvider(ethersProvider);
+            setSigner(ethersSigner);
+            setAccount(accounts[0]);
+            setChainId(Number(network.chainId));
+            setIsConnected(true);
+          }
         } catch (error) {
-          console.error('Error connecting to MetaMask', error);
+          console.error('Error checking MetaMask connection', error);
           setIsConnected(false);
         }
       } else {

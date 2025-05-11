@@ -14,7 +14,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "MLuck Marketplace",
+  title: "Mluck Marketplace",
   description: "Find your lucky property",
   icons: {
     icon: "/Logo.svg",

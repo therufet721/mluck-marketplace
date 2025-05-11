@@ -27,7 +27,7 @@ export default function Web3Provider({ children }: Web3ProviderProps) {
           })}
           modalSize="compact"
           appInfo={{
-            appName: 'MLuck Marketplace',
+            appName: 'Mluck Marketplace',
             // Ensure wallet connections prefer native apps when available
             // This is especially important for mobile wallet connections
             learnMoreUrl: 'https://www.binance.com/en/wallet-direct'

@@ -232,7 +232,7 @@ export default function ClientHeader({ title = 'Dashboard' }: ClientHeaderProps)
               <Link href="/" style={{ textDecoration: 'none' }}>
                 <Image 
                   src="/Logo.svg" 
-                  alt="MLuck Logo" 
+                  alt="Mluck Logo" 
                   width={isMobile ? 60 : 76.57} 
                   height={isMobile ? 56 : 71} 
                 />

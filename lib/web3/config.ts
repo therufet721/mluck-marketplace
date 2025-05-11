@@ -35,7 +35,7 @@ const connectors = connectorsForWallets(
     },
   ],
   {
-    appName: 'MLuck Marketplace',
+    appName: 'Mluck Marketplace',
     projectId,
   }
 );

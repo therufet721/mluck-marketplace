@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import {  getMarketplaceAvailableSlots } from '../../../../lib/slots';
@@ -53,6 +53,11 @@ export default function PropertyPurchasePage() {
   // Add state for flipped slots
   const [flippedSlots, setFlippedSlots] = useState<Record<number, boolean>>({});
   
+  // Add state for property images
+  const [propertyImages, setPropertyImages] = useState<string[]>([]);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [loadingImages, setLoadingImages] = useState(false);
+  
   // Get page from URL or default to 1
   const urlPage = searchParams.get('page');
   const urlPerPage = searchParams.get('perPage');
@@ -83,6 +88,72 @@ export default function PropertyPurchasePage() {
   // Use the shared mobile context
   const { isMobile } = useMobile();
 
+  // Track touch positions for swipe functionality
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  
+  // Required minimum swipe distance
+  const minSwipeDistance = 50;
+
+  // Add state for expanded image view
+  const [isImageExpanded, setIsImageExpanded] = useState(false);
+
+  // Handle touch start
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+  
+  // Handle touch move
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+  
+  // Handle touch end for swipe detection
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+    
+    // Navigate based on swipe direction
+    if (isLeftSwipe) {
+      nextImage();
+    }
+    if (isRightSwipe) {
+      prevImage();
+    }
+    
+    // Reset touch positions
+    setTouchStart(null);
+    setTouchEnd(null);
+  };
+
+  // Optimized next and prev image functions
+  const nextImage = useCallback(() => {
+    setCurrentImageIndex((prevIndex) => 
+      prevIndex === propertyImages.length - 1 ? 0 : prevIndex + 1
+    );
+  }, [propertyImages.length]);
+  
+  const prevImage = useCallback(() => {
+    setCurrentImageIndex((prevIndex) => 
+      prevIndex === 0 ? propertyImages.length - 1 : prevIndex - 1
+    );
+  }, [propertyImages.length]);
+
+  // Autoplay functionality
+  useEffect(() => {
+    if (propertyImages.length > 1) {
+      const interval = setInterval(() => {
+        nextImage();
+      }, 5000); // Change image every 5 seconds
+      
+      return () => clearInterval(interval);
+    }
+  }, [propertyImages.length, nextImage]);
+
   // Helper function to parse user balance
   const parseUserBalance = () => {
     if (!balance) return 0;
@@ -96,6 +167,55 @@ export default function PropertyPurchasePage() {
     return slotCount * (calculatePrice(propertyDetails.price) + calculatePrice(propertyDetails.fee));
   };
 
+  // Function to fetch property images
+  const fetchPropertyImages = async (slotContract: string) => {
+    if (!slotContract) return;
+    
+    setLoadingImages(true);
+    try {
+      // The API endpoint format based on the slot contract address
+      const galleryUrl = `https://chain.mluck.io/${slotContract}/gallery/`;
+      
+      
+      const response = await fetch(galleryUrl);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch images: ${response.status} ${response.statusText}`);
+      }
+      
+      const imagesData = await response.json();
+      
+      // Validate the response data
+      if (Array.isArray(imagesData) && imagesData.length > 0) {
+        // Filter out any non-string items
+        const validImages = imagesData.filter(url => {
+          const isValid = typeof url === 'string';
+          return isValid;
+        });
+        
+        if (validImages.length > 0) {
+          setPropertyImages(validImages);
+          
+          // Pre-check image loading to detect CORS issues
+          validImages.forEach((url, index) => {
+            const testImg = new window.Image();          // Add cache buster to avoid cached CORS errors
+            testImg.src = `${url}?nocache=${Date.now()}`;
+          });
+        } else {
+          setPropertyImages([]);
+        }
+      } else {
+        setPropertyImages([]);
+      }
+    } catch (error) {
+      console.error('Error fetching property images:', error);
+      setPropertyImages([]);
+    } finally {
+      setLoadingImages(false);
+    }
+  };
+  
+  // Existing useEffect to fetch property details
   useEffect(() => {
     const fetchPropertyDetails = async () => {
       try {
@@ -108,6 +228,8 @@ export default function PropertyPurchasePage() {
           status: details.status,
           name: `Property #${propertyId}`
         });
+
+        await fetchPropertyImages(details.property.slotContract);
 
         // Get total supply from the slot contract
         const { getTotalSupply } = await import('../../../../lib/contracts');
@@ -433,10 +555,197 @@ export default function PropertyPurchasePage() {
 
   const responsiveStyles = getResponsiveStyles();
 
-  
+  // Function to preload images - disabled to avoid CORS issues
+  const preloadImages = useCallback((imageUrls: string[]) => {
+    // Don't attempt client-side preloading as it causes CORS errors
+    console.log(`${imageUrls.length} images ready for display`);
+    // No actual preloading - Next.js Image with priority will handle this
+  }, []);
+
+  // Update the useEffect to preload images when property images are set
+  useEffect(() => {
+    if (propertyImages.length > 0) {
+      preloadImages(propertyImages);
+    }
+  }, [propertyImages, preloadImages]);
+
+  // Add keyboard navigation support
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle keyboard navigation when the carousel is visible
+      if (propertyImages.length > 0) {
+        if (e.key === 'ArrowLeft') {
+          prevImage();
+        } else if (e.key === 'ArrowRight') {
+          nextImage();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [propertyImages.length, prevImage, nextImage]);
+
+  // Function to toggle expanded image view
+  const toggleExpandedView = () => {
+    setIsImageExpanded(!isImageExpanded);
+  };
+
+  // Add debug logging to see when images change
+  useEffect(() => {
+    console.log('Property images state updated:', propertyImages);
+  }, [propertyImages]);
+
   return (
     <>
       <Header title="Purchase Property Slots" />
+      {/* Expanded Image Modal */}
+      {isImageExpanded && propertyImages.length > 0 && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 9999,
+          }}
+          onClick={toggleExpandedView}
+        >
+          <div 
+            style={{
+              position: 'relative',
+              width: '90%',
+              height: '100vh', // Explicit height
+              maxWidth: '1200px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Image 
+              src={propertyImages[currentImageIndex]} 
+              alt={`Property Image ${currentImageIndex + 1}`}
+              fill
+              style={{ 
+                objectFit: 'contain',
+              }}
+              sizes="90vw"
+              unoptimized={true}
+              priority
+              onError={(e) => {
+                console.error('Expanded image failed to load:', propertyImages[currentImageIndex]);
+                // Use default image as fallback
+                (e.target as HTMLImageElement).src = '/Properties.png';
+              }}
+            />
+            
+            {/* Close button */}
+            <button
+              onClick={toggleExpandedView}
+              style={{
+                position: 'absolute',
+                top: '15px',
+                right: '15px',
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '50%',
+                width: '40px',
+                height: '40px',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                cursor: 'pointer',
+                zIndex: 10,
+                boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+              }}
+              aria-label="Close expanded view"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M18 6L6 18M6 6L18 18" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            
+            {/* Navigation buttons */}
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              left: 0,
+              right: 0,
+              transform: 'translateY(-50%)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              padding: '0 20px',
+            }}>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  prevImage();
+                }}
+                style={{
+                  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '50px',
+                  height: '50px',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  cursor: 'pointer'
+                }}
+                aria-label="Previous image"
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M15 18L9 12L15 6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  nextImage();
+                }}
+                style={{
+                  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '50px',
+                  height: '50px',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  cursor: 'pointer'
+                }}
+                aria-label="Next image"
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M9 6L15 12L9 18" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            </div>
+            
+            {/* Image counter */}
+            <div style={{
+              position: 'absolute',
+              bottom: '15px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              color: 'white',
+              padding: '5px 15px',
+              borderRadius: '20px',
+              fontSize: '14px'
+            }}>
+              {currentImageIndex + 1} / {propertyImages.length}
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div style={{ 
         maxWidth: '1400px', // Increased max-width
         margin: '0 auto', 
@@ -604,18 +913,190 @@ export default function PropertyPurchasePage() {
               margin: '0 auto',
               paddingBottom: responsiveStyles.imagePaddingRatio,
               marginBottom: '20px',
-              maxHeight: isMobile ? 'fit-content' : '300px',
-              overflow: 'hidden'
+              maxHeight: isMobile ? '300px' : '400px',
+              height: isMobile ? '250px' : '350px',
+              overflow: 'hidden',
+              borderRadius: '10px'
             }}>
-              <Image 
-                src="/Properties.png"
-                alt="Property"
-                fill
-                style={{ 
-                  objectFit: 'cover', 
+              {/* Image Carousel */}
+              {propertyImages.length > 0 ? (
+                <div 
+                  style={{
+                    position: 'relative',
+                    width: '100%',
+                    height: '0',
+                    paddingBottom: '75%',
+                    borderRadius: '10px',
+                    cursor: 'pointer'
+                  }}
+                  onClick={toggleExpandedView}
+                  onTouchStart={onTouchStart}
+                  onTouchMove={onTouchMove}
+                  onTouchEnd={onTouchEnd}
+                >
+                  {/* Current Image */}
+                  <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    opacity: 1,
+                    transition: 'opacity 0.5s ease-in-out'
+                  }}>
+                    <Image 
+                      src={propertyImages[currentImageIndex]} 
+                      alt={`Property Image ${currentImageIndex + 1}`}
+                      fill
+                      style={{ 
+                        objectFit: 'cover', 
+                        borderRadius: '10px',
+                      }}
+                      unoptimized={true}
+                      priority={currentImageIndex === 0}
+                      sizes="(max-width: 768px) 100vw, 50vw"
+                      onError={(e) => {
+                        console.error('Image failed to load:', propertyImages[currentImageIndex]);
+                        // Use default image as fallback
+                        (e.target as HTMLImageElement).src = '/Properties.png';
+                      }}
+                    />
+                  </div>
+                  
+                  {/* Navigation Buttons */}
+                  <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '0 10px',
+                    zIndex: 5
+                  }}>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        prevImage();
+                      }}
+                      style={{
+                        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '50%',
+                        width: '36px',
+                        height: '36px',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.2s ease',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                      }}
+                      aria-label="Previous image"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M15 18L9 12L15 6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        nextImage();
+                      }}
+                      style={{
+                        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '50%',
+                        width: '36px',
+                        height: '36px',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.2s ease',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                      }}
+                      aria-label="Next image"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 6L15 12L9 18" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  </div>
+                  
+                  {/* Image Indicators */}
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '12px',
+                    left: '0',
+                    right: '0',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    zIndex: 5
+                  }}>
+                    {propertyImages.map((_, index) => (
+                      <button
+                        key={index}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCurrentImageIndex(index);
+                        }}
+                        style={{
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          backgroundColor: index === currentImageIndex ? 'white' : 'rgba(255, 255, 255, 0.5)',
+                          border: 'none',
+                          padding: 0,
+                          cursor: 'pointer',
+                          transition: 'background-color 0.3s ease'
+                        }}
+                        aria-label={`Go to image ${index + 1}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : loadingImages ? (
+                <div style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  backgroundColor: '#f0f0f0',
                   borderRadius: '10px',
-                }}
-              />
+                  flexDirection: 'column',
+                  gap: '15px'
+                }}>
+                  <div style={{ 
+                    width: '40px', 
+                    height: '40px', 
+                    borderRadius: '50%', 
+                    border: '4px solid rgba(75, 209, 111, 0.3)', 
+                    borderTop: '4px solid #4BD16F', 
+                    animation: 'spin 1s linear infinite',
+                  }}></div>
+                  <p style={{ fontSize: '0.9rem', color: '#666' }}>Loading property images...</p>
+                </div>
+              ) : (
+                <Image 
+                  src="/Properties.png"
+                  alt="Property"
+                  fill
+                  style={{ 
+                    objectFit: 'cover', 
+                    borderRadius: '10px',
+                  }}
+                />
+              )}
             </div>
             
             <h2 style={{ 
@@ -976,11 +1457,22 @@ export default function PropertyPurchasePage() {
             {loading ? (
               <div style={{ 
                 display: 'flex', 
+                flexDirection: 'column',
                 justifyContent: 'center', 
                 alignItems: 'center',
-                height: '200px'
+                height: '300px',
+                gap: '20px'
               }}>
-                <p>Loading slots...</p>
+                <div style={{ 
+                  width: '40px', 
+                  height: '40px', 
+                  borderRadius: '50%', 
+                  border: '4px solid rgba(75, 209, 111, 0.3)', 
+                  borderTop: '4px solid #4BD16F', 
+                  animation: 'spin 1s linear infinite',
+                }}></div>
+                <p style={{ fontSize: '1rem', color: '#333' }}>Loading available slots...</p>
+                <p style={{ fontSize: '0.8rem', color: '#666', textAlign: 'center' }}>Please wait while we retrieve the latest availability information</p>
               </div>
             ) : (
               <div style={{ 
@@ -1164,4 +1656,4 @@ export default function PropertyPurchasePage() {
       </div>
     </>
   );
-} 
+}

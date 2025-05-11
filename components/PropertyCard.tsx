@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { Property } from '../types';
 import Link from 'next/link';
@@ -9,6 +9,83 @@ type PropertyCardProps = {
 };
 
 export default function PropertyCard({ isComingSoon = false, property }: PropertyCardProps) {
+  // Add state for image carousel
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  
+  // Required minimum swipe distance
+  const minSwipeDistance = 50;
+
+  // Handle touch start
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+  
+  // Handle touch move
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+  
+  // Handle touch end for swipe detection
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+    
+    // Navigate based on swipe direction
+    if (isLeftSwipe) {
+      nextImage();
+    }
+    if (isRightSwipe) {
+      prevImage();
+    }
+    
+    // Reset touch positions
+    setTouchStart(null);
+    setTouchEnd(null);
+  };
+
+  // Optimized next and prev image functions
+  const nextImage = useCallback(() => {
+    if (!property?.gallery?.length) return;
+    
+    setCurrentImageIndex((prevIndex) => 
+      prevIndex === property.gallery!.length - 1 ? 0 : prevIndex + 1
+    );
+  }, [property?.gallery?.length]);
+  
+  const prevImage = useCallback(() => {
+    if (!property?.gallery?.length) return;
+    
+    setCurrentImageIndex((prevIndex) => 
+      prevIndex === 0 ? property.gallery!.length - 1 : prevIndex - 1
+    );
+  }, [property?.gallery?.length]);
+
+  // Autoplay functionality
+  useEffect(() => {
+    if (property?.gallery && property.gallery.length > 1) {
+      const interval = setInterval(() => {
+        nextImage();
+      }, 5000); // Change image every 5 seconds
+      
+      return () => clearInterval(interval);
+    }
+  }, [property?.gallery, nextImage]);
+
+  // Simplify URL handling - use direct gallery URLs
+  const normalizeImageUrl = (url: string | undefined) => {
+    // If no URL is provided, use the default image
+    if (!url) return '/Properties.png';
+    
+    // Simply return the URL as is - they come prefilled from the API
+    return url;
+  };
+
   if (isComingSoon) {
     return (
       <div style={{ 
@@ -55,6 +132,8 @@ export default function PropertyCard({ isComingSoon = false, property }: Propert
     return null;
   }
 
+  const hasGallery = property.gallery && property.gallery.length > 0;
+
   return (
     <div style={{ 
       backgroundColor: '#E8FFF0', 
@@ -71,14 +150,164 @@ export default function PropertyCard({ isComingSoon = false, property }: Propert
       padding: '26px'
     }}>
       {/* Property image section */}
-      <div style={{ position: 'relative',  marginBottom: '20px' }}>
-        <Image 
-          src="/Properties.png"
-          alt="Property"
-          width={310}
-          height={310}
-          style={{ objectFit: 'cover' , borderRadius: '15px'}}
-        />
+      <div style={{ 
+        position: 'relative', 
+        marginBottom: '20px',
+        width: '100%',
+        height: '250px', // Explicit height
+      }}>
+        {hasGallery ? (
+          <div 
+            style={{
+              position: 'relative',
+              width: '100%',
+              height: '0',
+              paddingBottom: '75%', // 4:3 aspect ratio
+              borderRadius: '15px',
+            }}
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+          >
+            {/* Current Image */}
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              opacity: 1,
+              transition: 'opacity 0.5s ease-in-out'
+            }}>
+              <Image 
+                src={normalizeImageUrl(property.gallery && property.gallery[currentImageIndex])}
+                alt={`${property.title} - Image ${currentImageIndex + 1}`}
+                fill
+                style={{ 
+                  objectFit: 'cover', 
+                  borderRadius: '15px',
+                }}
+                unoptimized={true}
+                sizes="(max-width: 768px) 100vw, 400px"
+                onError={(e) => {
+                  console.error('Image failed to load:', property.gallery?.[currentImageIndex]);
+                  // Use default image as fallback
+                  (e.target as HTMLImageElement).src = '/Properties.png';
+                }}
+              />
+            </div>
+            
+            {/* Navigation Buttons - Only show if there are multiple images */}
+            {property.gallery && property.gallery.length > 1 && (
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '0 10px',
+                zIndex: 5
+              }}>
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    prevImage();
+                  }}
+                  style={{
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '50%',
+                    width: '30px',
+                    height: '30px',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.2s ease',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                  }}
+                  aria-label="Previous image"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M15 18L9 12L15 6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    nextImage();
+                  }}
+                  style={{
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '50%',
+                    width: '30px',
+                    height: '30px',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.2s ease',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                  }}
+                  aria-label="Next image"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M9 6L15 12L9 18" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            )}
+            
+            {/* Image Indicators - Only show if there are multiple images */}
+            {property.gallery && property.gallery.length > 1 && (
+              <div style={{
+                position: 'absolute',
+                bottom: '12px',
+                left: '0',
+                right: '0',
+                display: 'flex',
+                justifyContent: 'center',
+                gap: '8px',
+                zIndex: 5
+              }}>
+                {property.gallery.map((_, index) => (
+                  <button
+                    key={index}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCurrentImageIndex(index);
+                    }}
+                    style={{
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      backgroundColor: index === currentImageIndex ? 'white' : 'rgba(255, 255, 255, 0.5)',
+                      border: 'none',
+                      padding: 0,
+                      cursor: 'pointer',
+                      transition: 'background-color 0.3s ease'
+                    }}
+                    aria-label={`Go to image ${index + 1}`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <Image 
+            src="/Properties.png"
+            alt="Property"
+            width={310}
+            height={220}
+            style={{ objectFit: 'cover', borderRadius: '15px' }}
+          />
+        )}
       </div>
       
       {/* Property details section */}

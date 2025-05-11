@@ -34,9 +34,7 @@ export async function getProperties(city?: string): Promise<Property[]> {
       apy: property.apy,
       price: property.price,
       slotContract: property.address, // Use the property address as the slot contract address
-      gallery: property.gallery ? property.gallery.map((image: string) => 
-        `${API_URL}/api/v1/asset/${property.address}/gallery/${image}`
-      ) : [],
+      gallery: property.gallery || [], // Use gallery URLs directly as they are already prefilled
     }));
   } catch (error) {
     console.error("Error fetching properties:", error);
@@ -69,9 +67,7 @@ export async function getPropertyById(id: string): Promise<Property | null> {
       apy: property.apy,
       price: property.price,
       slotContract: property.address,
-      gallery: property.gallery ? property.gallery.map((image: string) => 
-        `${API_URL}/api/v1/asset/${property.address}/gallery/${image}`
-      ) : [],
+      gallery: property.gallery || [], // Use gallery URLs directly as they are already prefilled
     };
   } catch (error) {
     console.error("Error fetching property by ID:", error);

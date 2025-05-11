@@ -43,7 +43,6 @@ export function useContracts() {
           setIsConnected(false);
         }
       } else {
-        console.log('Please install MetaMask!');
         setIsConnected(false);
       }
     };
@@ -120,7 +119,6 @@ export function useContracts() {
         return false;
       }
     } else {
-      console.log('Please install MetaMask!');
       return false;
     }
   }, []);

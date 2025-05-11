@@ -4,11 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "dev:polygon": "NEXT_PUBLIC_ENVIRONMENT=test next dev --turbopack",
-    "dev:bsc": "NEXT_PUBLIC_ENVIRONMENT=production next dev --turbopack",
     "build": "next build",
-    "build:polygon": "NEXT_PUBLIC_ENVIRONMENT=test next build && next start",
-    "build:bsc": "NEXT_PUBLIC_ENVIRONMENT=production next build && next start",
     "start": "next start",
     "lint": "next lint"
   },

@@ -14,8 +14,6 @@ function getChecksummedAddress(address: string) {
 // Get marketplace address from environment variable
 const MARKETPLACE_ADDRESS = process.env.NEXT_PUBLIC_MARKETPLACE_ADDRESS;
 const env = process.env.NEXT_PUBLIC_ENVIRONMENT;
-console.log("MARKETPLACE_ADDRESS:", MARKETPLACE_ADDRESS);
-console.log("ENV:", env);
 if (!MARKETPLACE_ADDRESS) {
   throw new Error('Marketplace address environment variable is not set');
 }
@@ -70,7 +68,6 @@ export async function getContractsWithSigner(signer: ethers.JsonRpcSigner) {
 
 // Function to get NFT contract
 export async function getNFTContract(provider: ethers.JsonRpcProvider, nftAddress: string) {
-  console.log("Creating NFT contract for address:", nftAddress);
   try {
     return new ethers.Contract(nftAddress, slotAbi, provider);
   } catch (error) {

@@ -19,6 +19,7 @@ export interface Property {
   availableSlots?: number;
   totalSlots?: number;
   isActive?: boolean;
+  gallery?: string[];
 }
 
 export interface ClaimableAsset {

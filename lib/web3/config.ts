@@ -1,6 +1,6 @@
 import { connectorsForWallets } from '@rainbow-me/rainbowkit';
 import { createConfig } from 'wagmi';
-import { polygon, bsc } from 'wagmi/chains';
+import { polygon } from 'wagmi/chains';
 import {
   metaMaskWallet,
   coinbaseWallet,
@@ -15,8 +15,8 @@ import { http } from 'viem';
 // Your WalletConnect project ID
 const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || 'a936392574f639a268ff81897035b673';
 
-// Determine environment: use BNB Chain for production, Polygon for test
-const isProd = process.env.NEXT_PUBLIC_ENVIRONMENT === 'production';
+// Always use Polygon chain
+const chains = [polygon] as const;
 
 // Create custom wallet list with connectors
 const connectors = connectorsForWallets(
@@ -24,8 +24,8 @@ const connectors = connectorsForWallets(
     {
       groupName: 'Recommended',
       wallets: [
-        metaMaskWallet,
         binanceWallet,
+        metaMaskWallet,
         rainbowWallet,
         coinbaseWallet,
         trustWallet,
@@ -43,10 +43,8 @@ const connectors = connectorsForWallets(
 // Create configuration with custom wallet list
 export const config = createConfig({
   connectors,
-  // Specify the chains in a tuple format to satisfy the type requirements
-  chains: isProd ? [bsc, polygon] as const : [polygon, bsc] as const,
+  chains,
   transports: {
-    [bsc.id]: http(),
     [polygon.id]: http(),
   },
   ssr: true,

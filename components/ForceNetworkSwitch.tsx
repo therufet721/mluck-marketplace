@@ -1,15 +1,14 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useWalletStatus } from '../lib/web3/hooks';
 
-// Determine environment
-const isProd = process.env.NEXT_PUBLIC_ENVIRONMENT === 'production';
-const networkName = isProd ? 'BNB Smart Chain' : 'Polygon Network';
-const networkChainId = isProd ? 56 : 137;
+const networkName = 'Polygon Network';
+const networkChainId = 137;
 
 export default function ForceNetworkSwitch() {
   const { isConnected, isCorrectNetwork, switchNetwork, chainId } = useWalletStatus();
+  const [isHovered, setIsHovered] = useState(false);
   
   if (!isConnected || isCorrectNetwork) {
     return null;
@@ -54,35 +53,24 @@ export default function ForceNetworkSwitch() {
         <p style={{ marginTop: '10px' }}>Please switch your network to continue.</p>
       </div>
       
-      <button 
+      <button
         onClick={switchNetwork}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
         style={{
-          backgroundColor: 'white',
+          backgroundColor: isHovered ? '#f0f0f0' : 'white',
           color: '#FF9F00',
           border: 'none',
-          borderRadius: '8px',
           padding: '12px 24px',
-          fontWeight: 'bold',
-          cursor: 'pointer',
-          width: '100%',
+          borderRadius: '8px',
           fontSize: '16px',
-          transition: 'all 0.2s'
-        }}
-        onMouseOver={(e) => { 
-          e.currentTarget.style.backgroundColor = '#f5f5f5';
-          e.currentTarget.style.transform = 'scale(1.02)';
-        }}
-        onMouseOut={(e) => { 
-          e.currentTarget.style.backgroundColor = 'white';
-          e.currentTarget.style.transform = 'scale(1)';
+          fontWeight: '600',
+          cursor: 'pointer',
+          transition: 'all 0.2s ease'
         }}
       >
         Switch to {networkName}
       </button>
-      
-      <div style={{ marginTop: '15px', fontSize: '12px', opacity: 0.8 }}>
-        <p>If switching doesn't work, please manually select {networkName} in your wallet</p>
-      </div>
     </div>
   );
 } 

@@ -9,32 +9,32 @@ import { useContracts } from '../hooks/useContracts'
 import { marketplaceAbi } from '../abi'
 
 // Chain IDs
-const BSC_TESTNET_CHAIN_ID = 97;
-const BSC_MAINNET_CHAIN_ID = 56;
 const POLYGON_CHAIN_ID = 137;
 const POLYGON_MUMBAI_CHAIN_ID = 80001;
 
-// Determine environment
-const isProd = process.env.NEXT_PUBLIC_ENVIRONMENT === 'production';
+// Set the active network
+const ACTIVE_CHAIN_ID = POLYGON_CHAIN_ID;
 
-// Set the active network based on environment
-const ACTIVE_CHAIN_ID = isProd ? BSC_MAINNET_CHAIN_ID : POLYGON_CHAIN_ID;
+// Hook for handling network changes
+export function useNetworkChangeEffect() {
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.ethereum) {
+      const handleChainChanged = () => {
+        window.location.reload();
+      };
+      
+      window.ethereum.on('chainChanged', handleChainChanged);
+      
+      return () => {
+        window.ethereum.removeListener('chainChanged', handleChainChanged);
+      };
+    }
+  }, []);
+}
 
 // Function to get chain configuration
 function getChainConfig(chainId: number) {
   switch(chainId) {
-    case BSC_MAINNET_CHAIN_ID:
-      return {
-        chainId: '0x38', // 56 in hex
-        chainName: 'BNB Smart Chain',
-        nativeCurrency: {
-          name: 'BNB',
-          symbol: 'BNB',
-          decimals: 18,
-        },
-        rpcUrls: ['https://bsc-dataseed.binance.org/'],
-        blockExplorerUrls: ['https://bscscan.com/'],
-      };
     case POLYGON_CHAIN_ID:
       return {
         chainId: '0x89', // 137 in hex
@@ -59,24 +59,12 @@ function getChainConfig(chainId: number) {
         rpcUrls: ['https://rpc-mumbai.maticvigil.com/'],
         blockExplorerUrls: ['https://mumbai.polygonscan.com/'],
       };
-    case BSC_TESTNET_CHAIN_ID:
-      return {
-        chainId: '0x61', // 97 in hex
-        chainName: 'BNB Smart Chain Testnet',
-        nativeCurrency: {
-          name: 'tBNB',
-          symbol: 'tBNB',
-          decimals: 18,
-        },
-        rpcUrls: ['https://data-seed-prebsc-1-s1.binance.org:8545/'],
-        blockExplorerUrls: ['https://testnet.bscscan.com/'],
-      };
     default:
       throw new Error(`Chain ID ${chainId} not supported`);
   }
 }
 
-// Function to switch to the correct network based on environment
+// Function to switch to the correct network
 async function switchToCorrectNetwork() {
   if (!window.ethereum) return false;
   
@@ -97,11 +85,11 @@ async function switchToCorrectNetwork() {
         });
         return true;
       } catch (addError) {
-        console.error(`Error adding ${isProd ? 'BNB Chain' : 'Polygon'} network:`, addError);
+        console.error('Error adding Polygon network:', addError);
         return false;
       }
     }
-    console.error(`Error switching to ${isProd ? 'BNB Chain' : 'Polygon'} network:`, switchError);
+    console.error('Error switching to Polygon network:', switchError);
     return false;
   }
 }
@@ -123,11 +111,7 @@ export function useWalletStatus() {
 
       // Set the connected chain name based on chainId
       if (chainId) {
-        if (chainId === BSC_MAINNET_CHAIN_ID) {
-          setConnectedChain('BSC');
-        } else if (chainId === BSC_TESTNET_CHAIN_ID) {
-          setConnectedChain('BSC Testnet');
-        } else if (chainId === POLYGON_CHAIN_ID) {
+        if (chainId === POLYGON_CHAIN_ID) {
           setConnectedChain('Polygon');
         } else if (chainId === POLYGON_MUMBAI_CHAIN_ID) {
           setConnectedChain('Polygon Mumbai');
@@ -152,11 +136,7 @@ export function useWalletStatus() {
         }
         
         // Update chain name on change
-        if (newChainIdNumber === BSC_MAINNET_CHAIN_ID) {
-          setConnectedChain('BSC');
-        } else if (newChainIdNumber === BSC_TESTNET_CHAIN_ID) {
-          setConnectedChain('BSC Testnet');
-        } else if (newChainIdNumber === POLYGON_CHAIN_ID) {
+        if (newChainIdNumber === POLYGON_CHAIN_ID) {
           setConnectedChain('Polygon');
         } else if (newChainIdNumber === POLYGON_MUMBAI_CHAIN_ID) {
           setConnectedChain('Polygon Mumbai');
@@ -187,8 +167,7 @@ export function useWalletStatus() {
     const success = await switchToCorrectNetwork();
     if (success) {
       setIsCorrectNetwork(true);
-      // Set the correct chain name after switch
-      setConnectedChain(isProd ? 'BSC' : 'Polygon');
+      setConnectedChain('Polygon');
     }
     return success;
   }, [])
@@ -203,7 +182,6 @@ export function useWalletStatus() {
     connectedChain
   }
 }
-
 // Hook to get claimable assets for the connected address
 export function useClaimableAssets() {
   const { address, isConnected } = useAccount()
@@ -587,23 +565,6 @@ export function useTokenBalance() {
     error,
     refetch: fetchBalance
   };
-}
-
-// Hook for handling network changes
-export function useNetworkChangeEffect() {
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.ethereum) {
-      const handleChainChanged = () => {
-        window.location.reload();
-      };
-      
-      window.ethereum.on('chainChanged', handleChainChanged);
-      
-      return () => {
-        window.ethereum.removeListener('chainChanged', handleChainChanged);
-      };
-    }
-  }, []);
 }
 
 // Hook for token approval

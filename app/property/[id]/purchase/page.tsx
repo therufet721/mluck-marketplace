@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import {  getMarketplaceAvailableSlots } from '../../../../lib/slots';
 import { useWalletStatus, usePurchaseSlots, useTokenBalance, useTokenApproval } from '../../../../lib/web3/hooks';
@@ -11,6 +11,7 @@ import { getProvider } from '../../../../lib/slots';
 import Header from '../../../../components/Header';
 import { ethers } from 'ethers';
 import { useMobile } from '../../../../contexts/MobileContext';
+import Pagination from '../../../../components/Pagination';
 
 // Helper function for price calculations
 const calculatePrice = (price: number) => {
@@ -34,6 +35,7 @@ const formatBalanceDisplay = (balance: string) => {
 export default function PropertyPurchasePage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const propertyId = params.id as string;
   const [slots, setSlots] = useState<Array<{ id: number; isSold: boolean }>>([]);
   const [selectedSlots, setSelectedSlots] = useState<number[]>([]);
@@ -48,9 +50,16 @@ export default function PropertyPurchasePage() {
   } | null>(null);
   
   const [totalSlots, setTotalSlots] = useState<number>(100); 
-  // Pagination states
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [slotsPerPage, setSlotsPerPage] = useState<number>(100);
+  // Add state for flipped slots
+  const [flippedSlots, setFlippedSlots] = useState<Record<number, boolean>>({});
+  
+  // Get page from URL or default to 1
+  const urlPage = searchParams.get('page');
+  const urlPerPage = searchParams.get('perPage');
+  
+  // Pagination states with URL integration
+  const [currentPage, setCurrentPage] = useState<number>(urlPage ? parseInt(urlPage) : 1);
+  const [slotsPerPage, setSlotsPerPage] = useState<number>(urlPerPage ? parseInt(urlPerPage) : 100);
 
   // Get wallet connection status
   const { isConnected, address, isCorrectNetwork, switchNetwork } = useWalletStatus();
@@ -92,7 +101,6 @@ export default function PropertyPurchasePage() {
       try {
         const provider = getProvider();
         const details = await getProperty(provider as ethers.JsonRpcProvider, propertyId);
-        console.log(details);
         setPropertyDetails({
           price: details.property.price,
           fee: details.property.fee,
@@ -214,18 +222,52 @@ export default function PropertyPurchasePage() {
     }
   }, [selectedSlots, balance, propertyDetails]);
 
+  // Add this effect to update from URL
+  useEffect(() => {
+    if (urlPage) {
+      const page = parseInt(urlPage);
+      if (page > 0 && page <= getTotalPages()) {
+        setCurrentPage(page);
+      }
+    }
+    
+    if (urlPerPage) {
+      const perPage = parseInt(urlPerPage);
+      if ([25, 50, 100, 200].includes(perPage)) {
+        setSlotsPerPage(perPage);
+      }
+    }
+  }, [urlPage, urlPerPage]);
+
   const handleSlotClick = (slotId: number, isSold: boolean) => {
     if (isSold || purchaseStep !== 'select') return;
     
+    // Update selected slots
     setSelectedSlots(prev => {
-      if (prev.includes(slotId)) {
-        // If already selected, remove it
-        return prev.filter(id => id !== slotId);
-      } else {
-        // If not selected, add it
-        return [...prev, slotId];
-      }
+      const newSelectedSlots = prev.includes(slotId)
+        ? prev.filter(id => id !== slotId) // Remove if already selected
+        : [...prev, slotId]; // Add if not selected
+      
+      // Update flipped state based on selection
+      setFlippedSlots(currentFlipped => {
+        const newFlipped = { ...currentFlipped };
+        
+        // For the slot being clicked, set flip state based on selection
+        // If being selected, flip it. If being deselected, unflip it.
+        newFlipped[slotId] = !prev.includes(slotId);
+        
+        return newFlipped;
+      });
+      
+      return newSelectedSlots;
     });
+  };
+  
+  // Remove the separate flip handler since flipping is now automatic with selection
+  const handleFlipClick = (slotId: number, e: React.MouseEvent) => {
+    // This function is no longer needed, but keeping the stub
+    // in case we want to add special flip behavior later
+    e.stopPropagation();
   };
 
   const handlePurchase = async () => {
@@ -372,6 +414,21 @@ export default function PropertyPurchasePage() {
   const handlePageChange = (page: number) => {
     if (page < 1 || page > getTotalPages()) return;
     setCurrentPage(page);
+  };
+  
+  // Handle per page change
+  const handlePerPageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const perPage = parseInt(e.target.value);
+    setSlotsPerPage(perPage);
+    
+    // Update URL with new per page value
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('perPage', perPage.toString());
+    params.set('page', '1'); // Reset to page 1 when changing items per page
+    router.replace(`${window.location.pathname}?${params.toString()}`, { scroll: false });
+    
+    // Reset to page 1
+    setCurrentPage(1);
   };
 
   const responsiveStyles = getResponsiveStyles();
@@ -588,7 +645,13 @@ export default function PropertyPurchasePage() {
                 marginBottom: '10px' 
               }}>
                 <span>Fee per Slot:</span>
-                <span style={{ fontWeight: 'bold' }}>{propertyDetails ? formatPrice(propertyDetails.fee) : '...'} USDT</span>
+                <span style={{ fontWeight: 'bold' }}>
+                  {propertyDetails ? 
+                    (propertyDetails.fee === 0 ? 
+                      <span style={{ textDecoration: 'line-through' }}>10 USDT</span> : 
+                      `${formatPrice(propertyDetails.fee)} USDT`) 
+                    : '...'}
+                </span>
               </div>
 
               <div style={{ 
@@ -889,78 +952,24 @@ export default function PropertyPurchasePage() {
             order: isMobile ? 1 : 2,
             minWidth: isMobile ? 'auto' : '50%'
           }}>
-            {/* Pagination controls - top */}
-            {totalSlots > slotsPerPage && (
+            {/* Pagination controls and Items per page - top */}
+            {totalSlots > 0 && (
               <div style={{
                 display: 'flex',
+                flexDirection: isMobile ? 'column' : 'row',
                 justifyContent: 'center',
                 alignItems: 'center',
-                gap: '10px',
+                gap: '15px',
                 marginBottom: '20px'
               }}>
-                <button
-                  onClick={() => handlePageChange(1)}
-                  disabled={currentPage === 1}
-                  style={{
-                    padding: '5px 10px',
-                    borderRadius: '5px',
-                    backgroundColor: currentPage === 1 ? '#f0f0f0' : '#4BD16F',
-                    color: currentPage === 1 ? '#aaa' : 'white',
-                    border: 'none',
-                    cursor: currentPage === 1 ? 'default' : 'pointer',
-                    fontSize: '0.8rem'
-                  }}
-                >
-                  First
-                </button>
-                <button
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  style={{
-                    padding: '5px 10px',
-                    borderRadius: '5px',
-                    backgroundColor: currentPage === 1 ? '#f0f0f0' : '#4BD16F',
-                    color: currentPage === 1 ? '#aaa' : 'white',
-                    border: 'none',
-                    cursor: currentPage === 1 ? 'default' : 'pointer',
-                    fontSize: '0.8rem'
-                  }}
-                >
-                  Prev
-                </button>
-                <span style={{ fontSize: '0.9rem' }}>
-                  Page {currentPage} of {getTotalPages()}
-                </span>
-                <button
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage === getTotalPages()}
-                  style={{
-                    padding: '5px 10px',
-                    borderRadius: '5px',
-                    backgroundColor: currentPage === getTotalPages() ? '#f0f0f0' : '#4BD16F',
-                    color: currentPage === getTotalPages() ? '#aaa' : 'white',
-                    border: 'none',
-                    cursor: currentPage === getTotalPages() ? 'default' : 'pointer',
-                    fontSize: '0.8rem'
-                  }}
-                >
-                  Next
-                </button>
-                <button
-                  onClick={() => handlePageChange(getTotalPages())}
-                  disabled={currentPage === getTotalPages()}
-                  style={{
-                    padding: '5px 10px',
-                    borderRadius: '5px',
-                    backgroundColor: currentPage === getTotalPages() ? '#f0f0f0' : '#4BD16F',
-                    color: currentPage === getTotalPages() ? '#aaa' : 'white',
-                    border: 'none',
-                    cursor: currentPage === getTotalPages() ? 'default' : 'pointer',
-                    fontSize: '0.8rem'
-                  }}
-                >
-                  Last
-                </button>
+                
+                {totalSlots > slotsPerPage && (
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={getTotalPages()}
+                    onPageChange={handlePageChange}
+                  />
+                )}
               </div>
             )}
             
@@ -983,6 +992,7 @@ export default function PropertyPurchasePage() {
               }}>
                 {getPaginatedSlots().map((slot) => {
                   const isSelected = selectedSlots.includes(slot.id);
+                  const isFlipped = flippedSlots[slot.id] || false;
                   
                   return (
                     <div 
@@ -997,24 +1007,75 @@ export default function PropertyPurchasePage() {
                         transform: isSelected ? 'scale(1.05)' : 'scale(1)',
                         boxShadow: isSelected ? '0 0 10px rgba(255, 159, 0, 0.3)' : 'none',
                         maxWidth: 'none', 
-                        margin: '0 auto'
+                        margin: '0 auto',
+                        perspective: '1000px'
                       }}
                     >
-                      {/* SVG Background with natural color */}
+                      {/* Flip container with SVG Background */}
                       <div 
+                        className="flip-container"
                         style={{
                           position: 'absolute',
                           top: 0,
                           left: 0,
                           right: 0,
                           bottom: 0,
-                          backgroundImage: `url('/images/BAK-KR1.svg')`,
-                          backgroundSize: 'contain',
-                          backgroundPosition: 'center',
-                          backgroundRepeat: 'no-repeat',
-                          /* Removed filters - all SVGs appear in natural color */
+                          transformStyle: 'preserve-3d',
+                          transition: 'transform 0.6s',
+                          transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)'
                         }}
-                      />
+                      >
+                        {/* Front side - SVG */}
+                        <div 
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            backfaceVisibility: 'hidden',
+                            backgroundImage: `url('/images/BAK-KR1.svg')`,
+                            backgroundSize: 'contain',
+                            backgroundPosition: 'center',
+                            backgroundRepeat: 'no-repeat',
+                          }}
+                        />
+                        
+                        {/* Back side - ID Number */}
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            backfaceVisibility: 'hidden',
+                            transform: 'rotateY(180deg)',
+                            backgroundImage: `url('/images/BAK-KR1.svg')`,
+                            backgroundSize: 'contain',
+                            backgroundPosition: 'center',
+                            backgroundRepeat: 'no-repeat',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 3
+                          }}
+                        >
+                          <div
+                            style={{
+                              backgroundColor: 'transparent',
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              fontWeight: '600',
+                              color: 'black',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                            }}
+                          >
+                            {slot.id}
+                          </div>
+                        </div>
+                      </div>
                       
                       {/* Status Badge */}
                       <div
@@ -1032,7 +1093,7 @@ export default function PropertyPurchasePage() {
                               : '#10B981', // Green for available
                           border: '2px solid white',
                           boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                          zIndex: 2
+                          zIndex: 4
                         }}
                       />
                     </div>
@@ -1043,77 +1104,12 @@ export default function PropertyPurchasePage() {
             
             {/* Pagination controls - bottom */}
             {totalSlots > slotsPerPage && (
-              <div style={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                gap: '10px',
-                marginTop: '20px'
-              }}>
-                <button
-                  onClick={() => handlePageChange(1)}
-                  disabled={currentPage === 1}
-                  style={{
-                    padding: '5px 10px',
-                    borderRadius: '5px',
-                    backgroundColor: currentPage === 1 ? '#f0f0f0' : '#4BD16F',
-                    color: currentPage === 1 ? '#aaa' : 'white',
-                    border: 'none',
-                    cursor: currentPage === 1 ? 'default' : 'pointer',
-                    fontSize: '0.8rem'
-                  }}
-                >
-                  First
-                </button>
-                <button
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  style={{
-                    padding: '5px 10px',
-                    borderRadius: '5px',
-                    backgroundColor: currentPage === 1 ? '#f0f0f0' : '#4BD16F',
-                    color: currentPage === 1 ? '#aaa' : 'white',
-                    border: 'none',
-                    cursor: currentPage === 1 ? 'default' : 'pointer',
-                    fontSize: '0.8rem'
-                  }}
-                >
-                  Prev
-                </button>
-                <span style={{ fontSize: '0.9rem' }}>
-                  Page {currentPage} of {getTotalPages()}
-                </span>
-                <button
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage === getTotalPages()}
-                  style={{
-                    padding: '5px 10px',
-                    borderRadius: '5px',
-                    backgroundColor: currentPage === getTotalPages() ? '#f0f0f0' : '#4BD16F',
-                    color: currentPage === getTotalPages() ? '#aaa' : 'white',
-                    border: 'none',
-                    cursor: currentPage === getTotalPages() ? 'default' : 'pointer',
-                    fontSize: '0.8rem'
-                  }}
-                >
-                  Next
-                </button>
-                <button
-                  onClick={() => handlePageChange(getTotalPages())}
-                  disabled={currentPage === getTotalPages()}
-                  style={{
-                    padding: '5px 10px',
-                    borderRadius: '5px',
-                    backgroundColor: currentPage === getTotalPages() ? '#f0f0f0' : '#4BD16F',
-                    color: currentPage === getTotalPages() ? '#aaa' : 'white',
-                    border: 'none',
-                    cursor: currentPage === getTotalPages() ? 'default' : 'pointer',
-                    fontSize: '0.8rem'
-                  }}
-                >
-                  Last
-                </button>
-              </div>
+              <Pagination
+                currentPage={currentPage}
+                totalPages={getTotalPages()}
+                onPageChange={handlePageChange}
+                containerStyles={{ marginTop: '20px', display: 'flex', justifyContent: 'center' }}
+              />
             )}
           </div>
         </div>

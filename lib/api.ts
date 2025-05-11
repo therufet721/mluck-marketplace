@@ -3,15 +3,11 @@ import { Property } from '../types';
 // This would be replaced with actual API calls to your backend
 const API_URL = 'https://chain.mluck.io';
 
-// Determine environment
-const isProd = process.env.NEXT_PUBLIC_ENVIRONMENT === 'production';
-
-// Chain IDs
-const BSC_CHAIN_ID = 56;
+// Chain ID
 const POLYGON_CHAIN_ID = 137;
 
-// Get the current chain ID based on environment
-const getChainId = () => isProd ? BSC_CHAIN_ID : POLYGON_CHAIN_ID;
+// Get the current chain ID
+const getChainId = () => POLYGON_CHAIN_ID;
 
 export async function getProperties(city?: string): Promise<Property[]> {
   try {
@@ -38,6 +34,9 @@ export async function getProperties(city?: string): Promise<Property[]> {
       apy: property.apy,
       price: property.price,
       slotContract: property.address, // Use the property address as the slot contract address
+      gallery: property.gallery ? property.gallery.map((image: string) => 
+        `${API_URL}/api/v1/asset/${property.address}/gallery/${image}`
+      ) : [],
     }));
   } catch (error) {
     console.error("Error fetching properties:", error);
@@ -46,8 +45,41 @@ export async function getProperties(city?: string): Promise<Property[]> {
 }
 
 export async function getPropertyById(id: string): Promise<Property | null> {
-  const properties = await getProperties();
-  return properties.find(property => property.id === id) || null;
+  try {
+    const chainId = getChainId();
+    const response = await fetch(`${API_URL}/api/v1/asset/properties/${id}?chain_id=${chainId}`);
+    
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    const property = data.data.property;
+    
+    if (!property) {
+      return null;
+    }
+    
+    return {
+      id: property.address,
+      address: property.address,
+      title: property.name,
+      type: property.type,
+      rental_income: property.rental_income === 1 ? "Yes" : "No",
+      apy: property.apy,
+      price: property.price,
+      slotContract: property.address,
+      gallery: property.gallery ? property.gallery.map((image: string) => 
+        `${API_URL}/api/v1/asset/${property.address}/gallery/${image}`
+      ) : [],
+    };
+  } catch (error) {
+    console.error("Error fetching property by ID:", error);
+    
+    // Fallback to the old method if direct fetch fails
+    const properties = await getProperties();
+    return properties.find(property => property.id === id) || null;
+  }
 }
 
 export async function getClaimableAssets(holderAddress: string): Promise<any> {

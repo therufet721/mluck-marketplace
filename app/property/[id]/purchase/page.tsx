@@ -13,6 +13,7 @@ import { ethers } from 'ethers';
 import { useMobile } from '../../../../contexts/MobileContext';
 import { useProperties } from '../../../../contexts/PropertiesContext';
 import Pagination from '../../../../components/Pagination';
+import Tooltip from '../../../components/Tooltip';
 
 // Helper function for price calculations
 const calculatePrice = (price: number) => {
@@ -1187,13 +1188,54 @@ export default function PropertyPurchasePage() {
                 marginBottom: '10px' 
               }}>
                 <span>Fee per Slot:</span>
-                <span style={{ fontWeight: 'bold' }}>
-                  {propertyDetails ? 
-                    (propertyDetails.fee === 0 ? 
-                      <span style={{ textDecoration: 'line-through' }}>10 USDT</span> : 
-                      `${formatPrice(propertyDetails.fee)} USDT`) 
-                    : '...'}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontWeight: 'bold' }}>
+                    {propertyDetails ? 
+                      (propertyDetails.fee === 0 ? 
+                        <span style={{ textDecoration: 'line-through' }}>10 USDT</span> : 
+                        `${formatPrice(propertyDetails.fee)} USDT`) 
+                      : '...'}
+                  </span>
+                  {propertyDetails?.fee === 0 && (
+                    <Tooltip 
+                      content="Limited time promotion! Regular fee is 10 USDT per slot. This promotional rate is available for a limited time only."
+                      placement="top"
+                    >
+                      <div>
+                        <svg 
+                          width="16" 
+                          height="16" 
+                          viewBox="0 0 24 24" 
+                          fill="none" 
+                          xmlns="http://www.w3.org/2000/svg"
+                          style={{ color: '#4BD16F', cursor: 'help' }}
+                        >
+                          <path 
+                            d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" 
+                            stroke="currentColor" 
+                            strokeWidth="2" 
+                            strokeLinecap="round" 
+                            strokeLinejoin="round"
+                          />
+                          <path 
+                            d="M12 16V12" 
+                            stroke="currentColor" 
+                            strokeWidth="2" 
+                            strokeLinecap="round" 
+                            strokeLinejoin="round"
+                          />
+                          <path 
+                            d="M12 8H12.01" 
+                            stroke="currentColor" 
+                            strokeWidth="2" 
+                            strokeLinecap="round" 
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </div>
+                    </Tooltip>
+                  )}
+                </div>
               </div>
 
               <div style={{ 

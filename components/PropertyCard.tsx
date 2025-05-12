@@ -9,10 +9,10 @@ type PropertyCardProps = {
 };
 
 export default function PropertyCard({ isComingSoon = false, property }: PropertyCardProps) {
-  // Add state for image carousel
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  const [isAnimating, setIsAnimating] = useState(false);
   
   // Required minimum swipe distance
   const minSwipeDistance = 50;
@@ -36,7 +36,6 @@ export default function PropertyCard({ isComingSoon = false, property }: Propert
     const isLeftSwipe = distance > minSwipeDistance;
     const isRightSwipe = distance < -minSwipeDistance;
     
-    // Navigate based on swipe direction
     if (isLeftSwipe) {
       nextImage();
     }
@@ -44,45 +43,54 @@ export default function PropertyCard({ isComingSoon = false, property }: Propert
       prevImage();
     }
     
-    // Reset touch positions
     setTouchStart(null);
     setTouchEnd(null);
   };
 
-  // Optimized next and prev image functions
   const nextImage = useCallback(() => {
-    if (!property?.gallery?.length) return;
+    if (!property?.gallery?.length || isAnimating) return;
     
-    setCurrentImageIndex((prevIndex) => 
-      prevIndex === property.gallery!.length - 1 ? 0 : prevIndex + 1
-    );
-  }, [property?.gallery?.length]);
-  
-  const prevImage = useCallback(() => {
-    if (!property?.gallery?.length) return;
-    
-    setCurrentImageIndex((prevIndex) => 
-      prevIndex === 0 ? property.gallery!.length - 1 : prevIndex - 1
-    );
-  }, [property?.gallery?.length]);
+    setIsAnimating(true);
+    setCurrentImageIndex((prevIndex) => {
+      const nextIndex = prevIndex === property.gallery!.length - 1 ? 0 : prevIndex + 1;
+      return nextIndex;
+    });
 
-  // Autoplay functionality
+    const timer = setTimeout(() => {
+      setIsAnimating(false);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [property?.gallery?.length, isAnimating]);
+
+  const prevImage = useCallback(() => {
+    if (!property?.gallery?.length || isAnimating) return;
+    
+    setIsAnimating(true);
+    setCurrentImageIndex((prevIndex) => {
+      const prevIndexValue = prevIndex === 0 ? property.gallery!.length - 1 : prevIndex - 1;
+      return prevIndexValue;
+    });
+
+    const timer = setTimeout(() => {
+      setIsAnimating(false);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [property?.gallery?.length, isAnimating]);
+
   useEffect(() => {
     if (property?.gallery && property.gallery.length > 1) {
       const interval = setInterval(() => {
         nextImage();
-      }, 5000); // Change image every 5 seconds
+      }, 5000);
       
       return () => clearInterval(interval);
     }
   }, [property?.gallery, nextImage]);
 
-  // Simplify URL handling - use direct gallery URLs
   const normalizeImageUrl = (url: string | undefined) => {
-    // If no URL is provided, use the default image
     if (!url) return '/Properties.png';
-    
-    // Simply return the URL as is - they come prefilled from the API
     return url;
   };
 
@@ -142,7 +150,6 @@ export default function PropertyCard({ isComingSoon = false, property }: Propert
       boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
       position: 'relative',
       transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
-      cursor: 'pointer',
       height: '100%',
       display: 'flex',
       flexDirection: 'column',
@@ -162,42 +169,54 @@ export default function PropertyCard({ isComingSoon = false, property }: Propert
               position: 'relative',
               width: '100%',
               height: '0',
-              paddingBottom: '75%', // 4:3 aspect ratio
+              paddingBottom: '75%',
               borderRadius: '15px',
+              overflow: 'hidden',
             }}
             onTouchStart={onTouchStart}
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
           >
-            {/* Current Image */}
             <div style={{
               position: 'absolute',
               top: 0,
               left: 0,
               width: '100%',
               height: '100%',
-              opacity: 1,
-              transition: 'opacity 0.5s ease-in-out'
+              display: 'flex',
+              transition: 'transform 300ms ease-out',
+              transform: `translateX(-${currentImageIndex * 100}%)`
             }}>
-              <Image 
-                src={normalizeImageUrl(property.gallery && property.gallery[currentImageIndex])}
-                alt={`${property.title} - Image ${currentImageIndex + 1}`}
-                fill
-                style={{ 
-                  objectFit: 'cover', 
-                  borderRadius: '15px',
-                }}
-                unoptimized={true}
-                sizes="(max-width: 768px) 100vw, 400px"
-                onError={(e) => {
-                  console.error('Image failed to load:', property.gallery?.[currentImageIndex]);
-                  // Use default image as fallback
-                  (e.target as HTMLImageElement).src = '/Properties.png';
-                }}
-              />
+              {property.gallery?.map((image, index) => (
+                <div
+                  key={index}
+                  style={{
+                    flex: '0 0 100%',
+                    position: 'relative',
+                    width: '100%',
+                    height: '100%'
+                  }}
+                >
+                  <Image
+                    src={normalizeImageUrl(image)}
+                    alt={`${property.title} - Image ${index + 1}`}
+                    fill
+                    style={{
+                      objectFit: 'cover',
+                      borderRadius: '15px',
+                    }}
+                    priority={index === currentImageIndex}
+                    unoptimized={true}
+                    sizes="(max-width: 768px) 100vw, 400px"
+                    onError={(e) => {
+                      console.error('Image failed to load:', image);
+                      (e.target as HTMLImageElement).src = '/Properties.png';
+                    }}
+                  />
+                </div>
+              ))}
             </div>
-            
-            {/* Navigation Buttons - Only show if there are multiple images */}
+
             {property.gallery && property.gallery.length > 1 && (
               <div style={{
                 position: 'absolute',
@@ -214,7 +233,7 @@ export default function PropertyCard({ isComingSoon = false, property }: Propert
                 <button 
                   onClick={(e) => {
                     e.stopPropagation();
-                    prevImage();
+                    if (!isAnimating) prevImage();
                   }}
                   style={{
                     backgroundColor: 'rgba(0, 0, 0, 0.3)',
@@ -226,10 +245,13 @@ export default function PropertyCard({ isComingSoon = false, property }: Propert
                     display: 'flex',
                     justifyContent: 'center',
                     alignItems: 'center',
-                    cursor: 'pointer',
-                    transition: 'background-color 0.2s ease',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                    cursor: isAnimating ? 'default' : 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                    opacity: isAnimating ? 0.5 : 1,
+                    transform: `scale(${isAnimating ? 0.95 : 1})`
                   }}
+                  disabled={isAnimating}
                   aria-label="Previous image"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -239,7 +261,7 @@ export default function PropertyCard({ isComingSoon = false, property }: Propert
                 <button 
                   onClick={(e) => {
                     e.stopPropagation();
-                    nextImage();
+                    if (!isAnimating) nextImage();
                   }}
                   style={{
                     backgroundColor: 'rgba(0, 0, 0, 0.3)',
@@ -251,10 +273,13 @@ export default function PropertyCard({ isComingSoon = false, property }: Propert
                     display: 'flex',
                     justifyContent: 'center',
                     alignItems: 'center',
-                    cursor: 'pointer',
-                    transition: 'background-color 0.2s ease',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                    cursor: isAnimating ? 'default' : 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                    opacity: isAnimating ? 0.5 : 1,
+                    transform: `scale(${isAnimating ? 0.95 : 1})`
                   }}
+                  disabled={isAnimating}
                   aria-label="Next image"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -264,7 +289,6 @@ export default function PropertyCard({ isComingSoon = false, property }: Propert
               </div>
             )}
             
-            {/* Image Indicators - Only show if there are multiple images */}
             {property.gallery && property.gallery.length > 1 && (
               <div style={{
                 position: 'absolute',
@@ -281,7 +305,11 @@ export default function PropertyCard({ isComingSoon = false, property }: Propert
                     key={index}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setCurrentImageIndex(index);
+                      if (!isAnimating) {
+                        setIsAnimating(true);
+                        setCurrentImageIndex(index);
+                        setTimeout(() => setIsAnimating(false), 300);
+                      }
                     }}
                     style={{
                       width: '8px',
@@ -290,9 +318,12 @@ export default function PropertyCard({ isComingSoon = false, property }: Propert
                       backgroundColor: index === currentImageIndex ? 'white' : 'rgba(255, 255, 255, 0.5)',
                       border: 'none',
                       padding: 0,
-                      cursor: 'pointer',
-                      transition: 'background-color 0.3s ease'
+                      cursor: isAnimating ? 'default' : 'pointer',
+                      transition: 'all 0.3s ease',
+                      transform: `scale(${index === currentImageIndex ? 1.2 : 1})`,
+                      opacity: isAnimating ? 0.5 : 1
                     }}
+                    disabled={isAnimating}
                     aria-label={`Go to image ${index + 1}`}
                   />
                 ))}
@@ -313,7 +344,7 @@ export default function PropertyCard({ isComingSoon = false, property }: Propert
       {/* Property details section */}
       <div style={{ padding: '20px', flex: 1, display: 'flex', flexDirection: 'column' }}>
         <h3 style={{ 
-          fontSize: '1.5rem', 
+          fontSize: '1rem', 
           fontWeight: 'bold', 
           marginBottom: '16px', 
           color: '#000',
@@ -386,7 +417,7 @@ export default function PropertyCard({ isComingSoon = false, property }: Propert
               </span>
               APY:
             </div>
-            <span style={{ fontWeight: '600', color: '#333' }}>{property.apy}%</span>
+            <span style={{ fontWeight: '600', color: '#333' }}>{Number(property.apy).toFixed(3)}%</span>
           </div>
           
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -397,7 +428,7 @@ export default function PropertyCard({ isComingSoon = false, property }: Propert
                   <path d="M17 5H9.5C8.57174 5 7.6815 5.36875 7.02513 6.02513C6.36875 6.6815 6 7.57174 6 8.5C6 9.42826 6.36875 10.3185 7.02513 10.9749C7.6815 11.6313 8.57174 12 9.5 12H14.5C15.4283 12 16.3185 12.3687 16.9749 13.0251C17.6313 13.6815 18 14.5717 18 15.5C18 16.4283 17.6313 17.3185 16.9749 17.9749C16.3185 18.6313 15.4283 19 14.5 19H6" stroke="#4BD16F" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </span>
-              Slot Price:
+              Price per Slot:
             </div>
             <span style={{ fontWeight: '600', color: '#333' }}>${property.price}</span>
           </div>

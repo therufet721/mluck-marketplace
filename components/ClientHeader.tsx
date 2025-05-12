@@ -229,14 +229,31 @@ export default function ClientHeader({ title = 'Dashboard' }: ClientHeaderProps)
             marginBottom: isMobile ? '20px' : '0'
           }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
-              <Link href="/" style={{ textDecoration: 'none' }}>
-                <Image 
-                  src="/Logo.svg" 
-                  alt="Mluck Logo" 
-                  width={isMobile ? 60 : 76.57} 
-                  height={isMobile ? 56 : 71} 
-                />
-              </Link>
+              <div style={{ position: 'relative' }}>
+                <Link href="/" style={{ textDecoration: 'none' }}>
+                  <Image 
+                    src="/Logo.svg" 
+                    alt="Mluck Logo" 
+                    width={isMobile ? 60 : 76.57} 
+                    height={isMobile ? 56 : 71} 
+                  />
+                </Link>
+                <div style={{
+                  position: 'absolute',
+                  top: 10,
+                  right: -50,
+                  background: 'rgba(77, 209, 111, 0.2)',
+                  color: '#4BD16F',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  boxShadow: '0 2px 4px rgba(77, 209, 111, 0.2)',
+                  letterSpacing: '0.5px'
+                }}>
+                  BETA
+                </div>
+              </div>
             </div>
 
             {isMobile ? (

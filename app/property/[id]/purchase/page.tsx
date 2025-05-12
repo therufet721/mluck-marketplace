@@ -11,6 +11,7 @@ import { getProvider } from '../../../../lib/slots';
 import Header from '../../../../components/Header';
 import { ethers } from 'ethers';
 import { useMobile } from '../../../../contexts/MobileContext';
+import { useProperties } from '../../../../contexts/PropertiesContext';
 import Pagination from '../../../../components/Pagination';
 
 // Helper function for price calculations
@@ -37,6 +38,7 @@ export default function PropertyPurchasePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const propertyId = params.id as string;
+  const { properties } = useProperties();
   const [slots, setSlots] = useState<Array<{ id: number; isSold: boolean }>>([]);
   const [selectedSlots, setSelectedSlots] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,6 +100,9 @@ export default function PropertyPurchasePage() {
   // Add state for expanded image view
   const [isImageExpanded, setIsImageExpanded] = useState(false);
 
+  // Add state for image animation
+  const [isAnimating, setIsAnimating] = useState(false);
+
   // Handle touch start
   const onTouchStart = (e: React.TouchEvent) => {
     setTouchEnd(null);
@@ -132,16 +137,34 @@ export default function PropertyPurchasePage() {
 
   // Optimized next and prev image functions
   const nextImage = useCallback(() => {
+    if (!propertyImages.length || isAnimating) return;
+    
+    setIsAnimating(true);
     setCurrentImageIndex((prevIndex) => 
       prevIndex === propertyImages.length - 1 ? 0 : prevIndex + 1
     );
-  }, [propertyImages.length]);
+    
+    const timer = setTimeout(() => {
+      setIsAnimating(false);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [propertyImages.length, isAnimating]);
   
   const prevImage = useCallback(() => {
+    if (!propertyImages.length || isAnimating) return;
+    
+    setIsAnimating(true);
     setCurrentImageIndex((prevIndex) => 
       prevIndex === 0 ? propertyImages.length - 1 : prevIndex - 1
     );
-  }, [propertyImages.length]);
+    
+    const timer = setTimeout(() => {
+      setIsAnimating(false);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [propertyImages.length, isAnimating]);
 
   // Autoplay functionality
   useEffect(() => {
@@ -558,7 +581,6 @@ export default function PropertyPurchasePage() {
   // Function to preload images - disabled to avoid CORS issues
   const preloadImages = useCallback((imageUrls: string[]) => {
     // Don't attempt client-side preloading as it causes CORS errors
-    console.log(`${imageUrls.length} images ready for display`);
     // No actual preloading - Next.js Image with priority will handle this
   }, []);
 
@@ -595,6 +617,17 @@ export default function PropertyPurchasePage() {
   useEffect(() => {
     console.log('Property images state updated:', propertyImages);
   }, [propertyImages]);
+
+  // Function to get property name
+  const getPropertyName = useCallback(() => {
+    if (!propertyDetails || !properties) return `Property #${propertyId}`;
+    
+    // Find matching property in context
+    const contextProperty = properties.find(p => p.address.toLowerCase() === propertyDetails.slotContract.toLowerCase());
+    
+    // Use context name if found, otherwise use default
+    return contextProperty ? contextProperty.title : (propertyDetails.name || `Property #${propertyId}`);
+  }, [propertyDetails, properties, propertyId]);
 
   return (
     <>
@@ -683,7 +716,7 @@ export default function PropertyPurchasePage() {
               <button 
                 onClick={(e) => {
                   e.stopPropagation();
-                  prevImage();
+                  if (!isAnimating) prevImage();
                 }}
                 style={{
                   backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -695,7 +728,7 @@ export default function PropertyPurchasePage() {
                   display: 'flex',
                   justifyContent: 'center',
                   alignItems: 'center',
-                  cursor: 'pointer'
+                  cursor: isAnimating ? 'default' : 'pointer'
                 }}
                 aria-label="Previous image"
               >
@@ -706,7 +739,7 @@ export default function PropertyPurchasePage() {
               <button 
                 onClick={(e) => {
                   e.stopPropagation();
-                  nextImage();
+                  if (!isAnimating) nextImage();
                 }}
                 style={{
                   backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -718,7 +751,7 @@ export default function PropertyPurchasePage() {
                   display: 'flex',
                   justifyContent: 'center',
                   alignItems: 'center',
-                  cursor: 'pointer'
+                  cursor: isAnimating ? 'default' : 'pointer'
                 }}
                 aria-label="Next image"
               >
@@ -927,42 +960,54 @@ export default function PropertyPurchasePage() {
                     height: '0',
                     paddingBottom: '75%',
                     borderRadius: '10px',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    overflow: 'hidden'
                   }}
                   onClick={toggleExpandedView}
                   onTouchStart={onTouchStart}
                   onTouchMove={onTouchMove}
                   onTouchEnd={onTouchEnd}
                 >
-                  {/* Current Image */}
                   <div style={{
                     position: 'absolute',
                     top: 0,
                     left: 0,
                     width: '100%',
                     height: '100%',
-                    opacity: 1,
-                    transition: 'opacity 0.5s ease-in-out'
+                    display: 'flex',
+                    transition: 'transform 300ms ease-out',
+                    transform: `translateX(-${currentImageIndex * 100}%)`
                   }}>
-                    <Image 
-                      src={propertyImages[currentImageIndex]} 
-                      alt={`Property Image ${currentImageIndex + 1}`}
-                      fill
-                      style={{ 
-                        objectFit: 'cover', 
-                        borderRadius: '10px',
-                      }}
-                      unoptimized={true}
-                      priority={currentImageIndex === 0}
-                      sizes="(max-width: 768px) 100vw, 50vw"
-                      onError={(e) => {
-                        console.error('Image failed to load:', propertyImages[currentImageIndex]);
-                        // Use default image as fallback
-                        (e.target as HTMLImageElement).src = '/Properties.png';
-                      }}
-                    />
+                    {propertyImages.map((image, index) => (
+                      <div
+                        key={index}
+                        style={{
+                          flex: '0 0 100%',
+                          position: 'relative',
+                          width: '100%',
+                          height: '100%'
+                        }}
+                      >
+                        <Image 
+                          src={image}
+                          alt={`Property Image ${index + 1}`}
+                          fill
+                          style={{ 
+                            objectFit: 'cover',
+                            borderRadius: '10px',
+                          }}
+                          unoptimized={true}
+                          priority={index === currentImageIndex}
+                          sizes="(max-width: 768px) 100vw, 50vw"
+                          onError={(e) => {
+                            console.error('Image failed to load:', image);
+                            (e.target as HTMLImageElement).src = '/Properties.png';
+                          }}
+                        />
+                      </div>
+                    ))}
                   </div>
-                  
+
                   {/* Navigation Buttons */}
                   <div style={{
                     position: 'absolute',
@@ -979,7 +1024,7 @@ export default function PropertyPurchasePage() {
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
-                        prevImage();
+                        if (!isAnimating) prevImage();
                       }}
                       style={{
                         backgroundColor: 'rgba(0, 0, 0, 0.3)',
@@ -991,10 +1036,13 @@ export default function PropertyPurchasePage() {
                         display: 'flex',
                         justifyContent: 'center',
                         alignItems: 'center',
-                        cursor: 'pointer',
-                        transition: 'background-color 0.2s ease',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                        cursor: isAnimating ? 'default' : 'pointer',
+                        transition: 'all 0.2s ease',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                        opacity: isAnimating ? 0.5 : 1,
+                        transform: `scale(${isAnimating ? 0.95 : 1})`
                       }}
+                      disabled={isAnimating}
                       aria-label="Previous image"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1004,7 +1052,7 @@ export default function PropertyPurchasePage() {
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
-                        nextImage();
+                        if (!isAnimating) nextImage();
                       }}
                       style={{
                         backgroundColor: 'rgba(0, 0, 0, 0.3)',
@@ -1016,10 +1064,13 @@ export default function PropertyPurchasePage() {
                         display: 'flex',
                         justifyContent: 'center',
                         alignItems: 'center',
-                        cursor: 'pointer',
-                        transition: 'background-color 0.2s ease',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                        cursor: isAnimating ? 'default' : 'pointer',
+                        transition: 'all 0.2s ease',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                        opacity: isAnimating ? 0.5 : 1,
+                        transform: `scale(${isAnimating ? 0.95 : 1})`
                       }}
+                      disabled={isAnimating}
                       aria-label="Next image"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1027,7 +1078,7 @@ export default function PropertyPurchasePage() {
                       </svg>
                     </button>
                   </div>
-                  
+
                   {/* Image Indicators */}
                   <div style={{
                     position: 'absolute',
@@ -1044,7 +1095,11 @@ export default function PropertyPurchasePage() {
                         key={index}
                         onClick={(e) => {
                           e.stopPropagation();
-                          setCurrentImageIndex(index);
+                          if (!isAnimating) {
+                            setIsAnimating(true);
+                            setCurrentImageIndex(index);
+                            setTimeout(() => setIsAnimating(false), 300);
+                          }
                         }}
                         style={{
                           width: '8px',
@@ -1053,9 +1108,12 @@ export default function PropertyPurchasePage() {
                           backgroundColor: index === currentImageIndex ? 'white' : 'rgba(255, 255, 255, 0.5)',
                           border: 'none',
                           padding: 0,
-                          cursor: 'pointer',
-                          transition: 'background-color 0.3s ease'
+                          cursor: isAnimating ? 'default' : 'pointer',
+                          transition: 'all 0.3s ease',
+                          transform: `scale(${index === currentImageIndex ? 1.2 : 1})`,
+                          opacity: isAnimating ? 0.5 : 1
                         }}
+                        disabled={isAnimating}
                         aria-label={`Go to image ${index + 1}`}
                       />
                     ))}
@@ -1102,12 +1160,15 @@ export default function PropertyPurchasePage() {
             <h2 style={{ 
               fontSize: isMobile ? '1.3rem' : '1.5rem',
               fontWeight: 'bold', 
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
               marginBottom: '15px',
               textOverflow: 'ellipsis',
               overflow: 'hidden',
               whiteSpace: 'nowrap'
             }}>
-              {propertyDetails ? shortenText(propertyDetails.name || `Property #${propertyId}`, getPropertyNameMaxLength()) : `Property #${propertyId}`}
+              {propertyDetails ? shortenText(getPropertyName(), getPropertyNameMaxLength()) : `Property #${propertyId}`}
             </h2>
             
             <div style={{ marginBottom: '20px' }}>

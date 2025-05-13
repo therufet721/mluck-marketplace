@@ -419,37 +419,23 @@ export default function PropertyPurchasePage() {
   const handlePurchase = async () => {
     if (selectedSlots.length === 0) return;
     
-    // Always try to connect wallet first regardless of isConnected status
-    try {
-      if (typeof window !== 'undefined' && window.ethereum) {
-        // This will trigger the wallet connection if not connected
-        // or return the accounts if already connected
-        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-        
-        if (accounts && accounts.length > 0) {
-          // User is connected, check network
-          if (!isCorrectNetwork) {
-            const switched = await switchNetwork();
-            if (!switched) {
-              alert('Please switch to Polygon network to continue');
-              return;
-            }
-          }
-          
-          // Set to confirm step
-          setPurchaseStep('confirm');
-          return;
-        }
-      }
-    } catch (error) {
-      console.error('Error connecting wallet:', error);
-      // User may have rejected the connection request
-      alert('Please connect your wallet to continue');
+    // If not connected, we need to show a message
+    if (!isConnected) {
+      alert('Please connect your wallet first');
       return;
     }
     
-    // If we get here, either there's no ethereum provider or the connection failed
-    alert('Please install a wallet extension like MetaMask or use a wallet-enabled browser');
+    // Check if on the correct network
+    if (!isCorrectNetwork) {
+      const switched = await switchNetwork();
+      if (!switched) {
+        alert('Please switch to Polygon network to continue');
+        return;
+      }
+    }
+    
+    // Set to confirm step
+    setPurchaseStep('confirm');
   };
   
   const confirmPurchase = async () => {
@@ -469,67 +455,31 @@ export default function PropertyPurchasePage() {
   };
 
   const handleApprove = async () => {
-    if (selectedSlots.length === 0 || !propertyDetails) return;
+    if (!isConnected || selectedSlots.length === 0 || !propertyDetails) return;
     
-    // Always try to connect wallet first regardless of isConnected status
     try {
-      if (typeof window !== 'undefined' && window.ethereum) {
-        // This will trigger the wallet connection if not connected
-        // or return the accounts if already connected
-        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-        
-        if (accounts && accounts.length > 0) {
-          // User is connected, proceed with approval
-          setPurchaseStep('processing');
-          
-          // Calculate total cost with 10% buffer in actual token amount (not divided by 10^18)
-          const totalCost = selectedSlots.length * (calculatePrice(propertyDetails.price) + calculatePrice(propertyDetails.fee));
-          const requiredAmountWithBuffer = totalCost * 1.1;
-          
-          try {
-            await approve(ADDRESSES.MARKETPLACE, requiredAmountWithBuffer);
-            setNeedsApproval(false);
-            
-            // Automatically proceed with purchase after approval
-            try {
-              await purchaseSlots(propertyId, selectedSlots);
-            } catch (error) {
-              console.error('Error purchasing slots:', error);
-              setPurchaseStep('error');
-            }
-          } catch (error) {
-            console.error('Error approving tokens:', error);
-            setPurchaseStep('error');
-          }
-          return;
-        }
+      setPurchaseStep('processing');
+      // Calculate total cost with 10% buffer in actual token amount (not divided by 10^18)
+      const totalCost = selectedSlots.length * (calculatePrice(propertyDetails.price) + calculatePrice(propertyDetails.fee));
+      const requiredAmountWithBuffer = totalCost * 1.1;
+      await approve(ADDRESSES.MARKETPLACE, requiredAmountWithBuffer);
+      setNeedsApproval(false);
+      
+      // Automatically proceed with purchase after approval
+      try {
+        await purchaseSlots(propertyId, selectedSlots);
+      } catch (error) {
+        console.error('Error purchasing slots:', error);
+        setPurchaseStep('error');
       }
     } catch (error) {
-      console.error('Error connecting wallet:', error);
-      // User may have rejected the connection request
-      alert('Please connect your wallet to continue');
-      setPurchaseStep('select');
-      return;
+      console.error('Error approving tokens:', error);
+      setPurchaseStep('error');
     }
-    
-    // If we get here, either there's no ethereum provider or the connection failed
-    alert('Please install a wallet extension like MetaMask or use a wallet-enabled browser');
-    setPurchaseStep('select');
   };
 
   // Update the button rendering logic
   const renderPurchaseButton = () => {
-    // Special case for mobile wallets that might report incorrect connection status
-    if (!isConnected && typeof window !== 'undefined' && window.ethereum && isMobile) {
-      // On mobile, show "Purchase Slots" instead of "Connect Wallet" if slots are selected
-      // The handlePurchase function will do a more thorough connection check
-      if (selectedSlots.length > 0) {
-        return needsApproval ? 'Approve USDT Spending' : `Purchase ${selectedSlots.length} Slots`;
-      }
-      // If no slots selected, still show Select Slots
-      return 'Select Slots';
-    }
-    
     if (!isConnected) return 'Connect Wallet';
     if (!isCorrectNetwork) return 'Switch Network';
     if (selectedSlots.length === 0) return 'Select Slots';
@@ -545,15 +495,6 @@ export default function PropertyPurchasePage() {
 
   // Update the button disabled state logic
   const isButtonDisabled = () => {
-    // Special case for mobile wallets that might report incorrect connection status
-    if (!isConnected && typeof window !== 'undefined' && window.ethereum) {
-      // Allow clicking even when isConnected is false on mobile
-      // The handlePurchase or handleApprove function will do a more thorough check
-      if (isMobile) {
-        return selectedSlots.length === 0 || balanceLoading;
-      }
-    }
-    
     if (!isConnected) return true;
     if (!isCorrectNetwork) return true;
     if (selectedSlots.length === 0) return true;

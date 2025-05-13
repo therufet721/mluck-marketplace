@@ -1,16 +1,16 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useWalletStatus } from '../lib/web3/hooks';
+import { useAuth } from '../contexts/AuthContext';
 
 const networkName = 'Polygon Network';
 const networkChainId = 137;
 
 export default function ForceNetworkSwitch() {
-  const { isConnected, isCorrectNetwork, switchNetwork, chainId } = useWalletStatus();
+  const { isAuthenticated: isConnected, isWrongNetwork, switchNetwork } = useAuth();
   const [isHovered, setIsHovered] = useState(false);
   
-  if (!isConnected || isCorrectNetwork) {
+  if (!isConnected || !isWrongNetwork) {
     return null;
   }
   
@@ -48,7 +48,7 @@ export default function ForceNetworkSwitch() {
       </div>
       
       <div style={{ marginBottom: '20px', fontSize: '14px', lineHeight: '1.6' }}>
-        <p>You are currently connected to <b>chain ID: {chainId}</b></p>
+        <p>You are currently connected to <b>chain ID: {networkChainId}</b></p>
         <p>This application requires <b>{networkName} (chain ID: {networkChainId})</b></p>
         <p style={{ marginTop: '10px' }}>Please switch your network to continue.</p>
       </div>

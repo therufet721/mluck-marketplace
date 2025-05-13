@@ -96,92 +96,20 @@ async function switchToCorrectNetwork() {
 
 // Hook for wallet connection status
 export function useWalletStatus() {
-  const { account, isConnected, connectWallet, chainId } = useContracts()
-  const [isCorrectNetwork, setIsCorrectNetwork] = useState(false)
-  const [connectedChain, setConnectedChain] = useState<string | null>(null)
-  
-  // Check if connected to correct network and set chain name
-  useEffect(() => {
-    const checkNetwork = () => {
-      if (chainId === ACTIVE_CHAIN_ID) {
-        setIsCorrectNetwork(true);
-      } else {
-        setIsCorrectNetwork(false);
-      }
-
-      // Set the connected chain name based on chainId
-      if (chainId) {
-        if (chainId === POLYGON_CHAIN_ID) {
-          setConnectedChain('Polygon');
-        } else if (chainId === POLYGON_MUMBAI_CHAIN_ID) {
-          setConnectedChain('Polygon Mumbai');
-        } else {
-          setConnectedChain(`Chain ID: ${chainId}`);
-        }
-      } else {
-        setConnectedChain(null);
-      }
-    };
-
-    checkNetwork();
-
-    // Listen for network changes
-    if (window.ethereum) {
-      window.ethereum.on('chainChanged', (newChainId: string) => {
-        const newChainIdNumber = parseInt(newChainId, 16);
-        if (newChainIdNumber === ACTIVE_CHAIN_ID) {
-          setIsCorrectNetwork(true);
-        } else {
-          setIsCorrectNetwork(false);
-        }
-        
-        // Update chain name on change
-        if (newChainIdNumber === POLYGON_CHAIN_ID) {
-          setConnectedChain('Polygon');
-        } else if (newChainIdNumber === POLYGON_MUMBAI_CHAIN_ID) {
-          setConnectedChain('Polygon Mumbai');
-        } else {
-          setConnectedChain(`Chain ID: ${newChainIdNumber}`);
-        }
-      });
-    }
-
-    return () => {
-      if (window.ethereum) {
-        window.ethereum.removeListener('chainChanged', () => {});
-      }
-    };
-  }, [chainId])
+  const { account, isConnected, connectWallet } = useContracts()
   
   // Handler for connecting wallet
   const handleConnect = useCallback(async () => {
-    const connected = await connectWallet()
-    if (connected && chainId !== ACTIVE_CHAIN_ID) {
-      await switchToCorrectNetwork()
-    }
-    return connected
-  }, [connectWallet, chainId])
-  
-  // Function to switch to the correct network
-  const switchNetwork = useCallback(async () => {
-    const success = await switchToCorrectNetwork();
-    if (success) {
-      setIsCorrectNetwork(true);
-      setConnectedChain('Polygon');
-    }
-    return success;
-  }, [])
+    return await connectWallet()
+  }, [connectWallet])
   
   return {
     address: account,
     isConnected,
-    isCorrectNetwork,
-    connect: handleConnect,
-    switchNetwork,
-    chainId,
-    connectedChain
+    connect: handleConnect
   }
 }
+
 // Hook to get claimable assets for the connected address
 export function useClaimableAssets() {
   const { address, isConnected } = useAccount()

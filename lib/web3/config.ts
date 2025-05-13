@@ -48,4 +48,6 @@ export const config = createConfig({
     [polygon.id]: http(),
   },
   ssr: true,
-}); 
+});
+
+export { chains }; 

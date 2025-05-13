@@ -1,32 +1,10 @@
 'use client'
 
 import { ConnectButton } from '@rainbow-me/rainbowkit'
-import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { useWalletStatus } from '../lib/web3/hooks'
 
 export default function ConnectWallet() {
   const { isAuthenticated, isLoading } = useAuth()
-  const { isCorrectNetwork, switchNetwork } = useWalletStatus()
-  const [isNetworkSwitching, setIsNetworkSwitching] = useState(false)
-
-  // Automatically switch network when connected
-  useEffect(() => {
-    const handleNetworkSwitch = async () => {
-      if (isAuthenticated && !isCorrectNetwork && !isNetworkSwitching) {
-        setIsNetworkSwitching(true)
-        try {
-          await switchNetwork()
-        } catch (error) {
-          console.error('Failed to switch network:', error)
-        } finally {
-          setIsNetworkSwitching(false)
-        }
-      }
-    }
-
-    handleNetworkSwitch()
-  }, [isAuthenticated, isCorrectNetwork, switchNetwork, isNetworkSwitching])
 
   return (
     <ConnectButton.Custom>
@@ -38,7 +16,7 @@ export default function ConnectWallet() {
         mounted,
       }) => {
         const ready = mounted && !isLoading
-        const connected = ready && account && chain
+        const connected = ready && account && chain && !chain.unsupported
 
         return (
           <div
@@ -83,30 +61,6 @@ export default function ConnectWallet() {
                     </span>
                     Connect Wallet
                   </button>
-                )
-              }
-
-              if (chain?.unsupported || !isCorrectNetwork) {
-                return (
-                  <div style={{
-                    backgroundColor: '#4BD16F',
-                    color: 'white',
-                    padding: '8px 16px',
-                    borderRadius: '9999px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}>
-                    <div style={{ 
-                      width: '16px', 
-                      height: '16px', 
-                      borderRadius: '50%', 
-                      border: '2px solid white', 
-                      borderTopColor: 'transparent',
-                      animation: 'spin 1s linear infinite'
-                    }} />
-                    Switching Network...
-                  </div>
                 )
               }
 

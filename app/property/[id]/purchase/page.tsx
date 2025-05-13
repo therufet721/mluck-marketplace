@@ -70,9 +70,8 @@ export default function PropertyPurchasePage() {
   const [currentPage, setCurrentPage] = useState<number>(urlPage ? parseInt(urlPage) : 1);
   const [slotsPerPage, setSlotsPerPage] = useState<number>(urlPerPage ? parseInt(urlPerPage) : 100);
 
-  // Replace useWalletStatus with useAuth
-  const { isAuthenticated: isConnected, isLoading: authLoading } = useAuth();
-  const { isCorrectNetwork, switchNetwork } = useWalletStatus();
+  // Use simplified wallet status hook
+  const { isConnected } = useWalletStatus();
   
   // Get token balance
   const { balance, loading: balanceLoading, refetch: refetchBalance } = useTokenBalance();
@@ -430,15 +429,6 @@ export default function PropertyPurchasePage() {
       return;
     }
     
-    // Check if on the correct network
-    if (!isCorrectNetwork) {
-      const switched = await switchNetwork();
-      if (!switched) {
-        alert('Please switch to Polygon network to continue');
-        return;
-      }
-    }
-    
     // Set to confirm step
     setPurchaseStep('confirm');
   };
@@ -483,29 +473,14 @@ export default function PropertyPurchasePage() {
     }
   };
 
-  // Check and switch network automatically when connected
-  useEffect(() => {
-    const handleNetworkSwitch = async () => {
-      if (isConnected && !isCorrectNetwork && !isNetworkSwitching) {
-        setIsNetworkSwitching(true);
-        try {
-          await switchNetwork();
-        } catch (error) {
-          console.error('Failed to switch network:', error);
-        } finally {
-          setIsNetworkSwitching(false);
-        }
-      }
-    };
-
-    handleNetworkSwitch();
-  }, [isConnected, isCorrectNetwork, switchNetwork, isNetworkSwitching]);
+  // Use auth context
+  const { isAuthenticated: isConnectedAuth, isLoading: authLoading, isWrongNetwork, switchNetwork, isSwitchingNetwork } = useAuth();
 
   // Update button rendering logic
   const renderPurchaseButton = () => {
     if (authLoading) return 'Connecting...';
-    if (!isConnected) return 'Connect Wallet';
-    if (!isCorrectNetwork) return 'Switching Network...';
+    if (!isConnectedAuth) return 'Connect Wallet';
+    if (isWrongNetwork && isSwitchingNetwork) return 'Switching Network...';
     if (selectedSlots.length === 0) return 'Select Slots';
     if (balanceLoading) return 'Checking Balance...';
     
@@ -520,8 +495,8 @@ export default function PropertyPurchasePage() {
   // Update button disabled state logic
   const isButtonDisabled = () => {
     if (authLoading) return true;
-    if (!isConnected) return true;
-    if (!isCorrectNetwork || isNetworkSwitching) return true;
+    if (!isConnectedAuth) return true;
+    if (isWrongNetwork && isSwitchingNetwork) return true;
     if (selectedSlots.length === 0) return true;
     if (balanceLoading) return true;
     
@@ -529,6 +504,27 @@ export default function PropertyPurchasePage() {
     const currentBalance = parseUserBalance();
     
     return currentBalance < totalCost;
+  };
+
+  // Update button click handler
+  const handleButtonClick = async () => {
+    if (!isConnectedAuth) {
+      // Handle by ConnectWallet component
+      return;
+    }
+    
+    if (isWrongNetwork && isSwitchingNetwork) {
+      await switchNetwork?.();
+      return;
+    }
+    
+    if (selectedSlots.length === 0) return;
+    
+    if (needsApproval) {
+      await handleApprove();
+    } else {
+      await handlePurchase();
+    }
   };
 
   // Helper function to shorten text based on screen size
@@ -908,37 +904,37 @@ export default function PropertyPurchasePage() {
           </div>
           
           {/* Network warnings - updated to show switching state */}
-          {!isConnected && !authLoading && (
+          {isWrongNetwork && (
             <div style={{
               backgroundColor: '#FFF4E5',
               color: '#FF9F00',
-              padding: '8px 16px',
-              borderRadius: '8px',
-              fontSize: '0.9rem'
-            }}>
-              Please connect your wallet to purchase slots
-            </div>
-          )}
-          {isConnected && !isCorrectNetwork && (
-            <div style={{
-              backgroundColor: '#FFF4E5',
-              color: '#FF9F00',
-              padding: '8px 16px',
-              borderRadius: '8px',
-              fontSize: '0.9rem',
+              padding: '15px',
+              borderRadius: '10px',
+              marginBottom: '20px',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px'
+              gap: '10px'
             }}>
-              <div style={{ 
-                width: '20px', 
-                height: '20px', 
-                borderRadius: '50%', 
-                border: '2px solid #FF9F00', 
-                borderTopColor: 'transparent',
-                animation: 'spin 1s linear infinite'
-              }} />
-              Switching to Polygon network...
+              {isSwitchingNetwork ? (
+                <>
+                  <div style={{ 
+                    width: '20px', 
+                    height: '20px', 
+                    borderRadius: '50%', 
+                    border: '2px solid #FF9F00', 
+                    borderTopColor: 'transparent',
+                    animation: 'spin 1s linear infinite'
+                  }} />
+                  Switching to Polygon network...
+                </>
+              ) : (
+                <>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FF9F00" strokeWidth="2">
+                    <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                  </svg>
+                  Please switch to Polygon network to continue
+                </>
+              )}
             </div>
           )}
         </div>
@@ -1523,6 +1519,8 @@ export default function PropertyPurchasePage() {
             
             {purchaseStep === 'select' && (
               <button 
+                onClick={handleButtonClick}
+                disabled={isButtonDisabled()}
                 style={{ 
                   backgroundColor: isButtonDisabled() ? '#ccc' : '#4BD16F', 
                   color: 'white', 
@@ -1537,8 +1535,6 @@ export default function PropertyPurchasePage() {
                   boxShadow: '0 2px 4px rgba(75, 209, 111, 0.3)',
                   opacity: isButtonDisabled() ? 0.7 : 1
                 }}
-                onClick={needsApproval ? handleApprove : handlePurchase}
-                disabled={isButtonDisabled()}
               >
                 {renderPurchaseButton()}
               </button>
@@ -1767,7 +1763,7 @@ export default function PropertyPurchasePage() {
                   transition: 'background-color 0.2s ease',
                   opacity: isButtonDisabled() ? 0.7 : 1
                 }}
-                onClick={needsApproval ? handleApprove : handlePurchase}
+                onClick={handleButtonClick}
                 disabled={isButtonDisabled()}
               >
                 {renderPurchaseButton()}

@@ -14,6 +14,7 @@ import { useMobile } from '../../../../contexts/MobileContext';
 import { useProperties } from '../../../../contexts/PropertiesContext';
 import Pagination from '../../../../components/Pagination';
 import Tooltip from '../../../components/Tooltip';
+import { useAuth } from '../../../../contexts/AuthContext';
 
 // Helper function for price calculations
 const calculatePrice = (price: number) => {
@@ -69,8 +70,9 @@ export default function PropertyPurchasePage() {
   const [currentPage, setCurrentPage] = useState<number>(urlPage ? parseInt(urlPage) : 1);
   const [slotsPerPage, setSlotsPerPage] = useState<number>(urlPerPage ? parseInt(urlPerPage) : 100);
 
-  // Get wallet connection status
-  const { isConnected, address, isCorrectNetwork, switchNetwork } = useWalletStatus();
+  // Replace useWalletStatus with useAuth
+  const { isAuthenticated: isConnected, isLoading: authLoading } = useAuth();
+  const { isCorrectNetwork, switchNetwork } = useWalletStatus();
   
   // Get token balance
   const { balance, loading: balanceLoading, refetch: refetchBalance } = useTokenBalance();
@@ -480,6 +482,7 @@ export default function PropertyPurchasePage() {
 
   // Update the button rendering logic
   const renderPurchaseButton = () => {
+    if (authLoading) return 'Connecting...';
     if (!isConnected) return 'Connect Wallet';
     if (!isCorrectNetwork) return 'Switch Network';
     if (selectedSlots.length === 0) return 'Select Slots';
@@ -495,6 +498,7 @@ export default function PropertyPurchasePage() {
 
   // Update the button disabled state logic
   const isButtonDisabled = () => {
+    if (authLoading) return true;
     if (!isConnected) return true;
     if (!isCorrectNetwork) return true;
     if (selectedSlots.length === 0) return true;
@@ -883,7 +887,7 @@ export default function PropertyPurchasePage() {
           </div>
           
           {/* Network warnings */}
-          {!isConnected && (
+          {!isConnected && !authLoading && (
             <div style={{
               backgroundColor: '#FFF4E5',
               color: '#FF9F00',

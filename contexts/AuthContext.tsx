@@ -10,8 +10,8 @@ interface AuthContextType {
   isLoading: boolean;
   address: string | undefined;
   isWrongNetwork: boolean;
-  switchNetwork: (() => Promise<void>) | undefined;
   isSwitchingNetwork: boolean;
+  switchNetwork?: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -19,8 +19,8 @@ const AuthContext = createContext<AuthContextType>({
   isLoading: true,
   address: undefined,
   isWrongNetwork: false,
-  switchNetwork: undefined,
   isSwitchingNetwork: false,
+  switchNetwork: undefined,
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -33,16 +33,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isWrongNetwork, setIsWrongNetwork] = useState(false);
   const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false);
 
-  useEffect(() => {
-    // Check if connected and on the right network
-    const isRightNetwork = chainId === polygon.id;
-    setIsWrongNetwork(isConnected && !isRightNetwork);
-    setIsAuthenticated(isConnected && isRightNetwork);
-    setIsLoading(isConnecting || isSwitchingNetwork);
-  }, [isConnected, isConnecting, chainId, isSwitchingNetwork]);
-
+  // Add switchNetwork function
   const handleSwitchNetwork = async () => {
-    if (!isConnected) return;
     try {
       setIsSwitchingNetwork(true);
       await switchNetwork(config, { chainId: polygon.id });
@@ -53,6 +45,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Automatically switch network when connected to wrong network
+  useEffect(() => {
+    const handleNetworkSwitch = async () => {
+      const isRightNetwork = chainId === polygon.id;
+      if (isConnected && !isRightNetwork && !isSwitchingNetwork) {
+        await handleSwitchNetwork();
+      }
+      setIsWrongNetwork(isConnected && !isRightNetwork);
+      setIsAuthenticated(isConnected && isRightNetwork);
+      setIsLoading(isConnecting || isSwitchingNetwork);
+    };
+
+    handleNetworkSwitch();
+  }, [isConnected, chainId, config, isConnecting, isSwitchingNetwork]);
+
   return (
     <AuthContext.Provider
       value={{
@@ -60,8 +67,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         address,
         isWrongNetwork,
-        switchNetwork: handleSwitchNetwork,
         isSwitchingNetwork,
+        switchNetwork: handleSwitchNetwork,
       }}
     >
       {children}

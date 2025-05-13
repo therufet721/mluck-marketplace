@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useTokenBalance, useWalletStatus } from '../lib/web3/hooks';
+import { useTokenBalance } from '../lib/web3/hooks';
+import { useAuth } from '../contexts/AuthContext';
 import { useMobile } from '../contexts/MobileContext';
 
 type ClientHeaderProps = {
@@ -13,7 +14,7 @@ type ClientHeaderProps = {
 
 export default function ClientHeader({ title = 'Dashboard' }: ClientHeaderProps) {
   const { balance, loading } = useTokenBalance();
-  const { isCorrectNetwork, connectedChain } = useWalletStatus();
+  const { isWrongNetwork, isAuthenticated } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { isMobile } = useMobile();
 
@@ -26,6 +27,10 @@ export default function ClientHeader({ title = 'Dashboard' }: ClientHeaderProps)
     }
   }, [isMobileMenuOpen]);
   
+  // Update network badge rendering
+  const isCorrectNetwork = !isWrongNetwork;
+  const connectedChain = isAuthenticated ? 'Polygon' : undefined;
+
   return (
     <>
       {/* Mobile Side Menu */}
@@ -170,7 +175,7 @@ export default function ClientHeader({ title = 'Dashboard' }: ClientHeaderProps)
                   marginRight: '8px',
                   boxShadow: '0 0 5px rgba(77, 209, 111, 0.8)'
                 }}/>
-                {loading ? '0.00 MLUCK' : balance || '0.00 MLUCK'}
+                {loading ? '0.00 USDT' : balance || '0.00 MLUCK'}
               </div>
             </div>
 

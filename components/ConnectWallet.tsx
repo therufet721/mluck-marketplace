@@ -1,28 +1,44 @@
 'use client'
 
 import { ConnectButton } from '@rainbow-me/rainbowkit'
+import { useEffect, useState } from 'react'
+import { useAuth } from '../contexts/AuthContext'
+import { useWalletStatus } from '../lib/web3/hooks'
 
 export default function ConnectWallet() {
+  const { isAuthenticated, isLoading } = useAuth()
+  const { isCorrectNetwork, switchNetwork } = useWalletStatus()
+  const [isNetworkSwitching, setIsNetworkSwitching] = useState(false)
+
+  // Automatically switch network when connected
+  useEffect(() => {
+    const handleNetworkSwitch = async () => {
+      if (isAuthenticated && !isCorrectNetwork && !isNetworkSwitching) {
+        setIsNetworkSwitching(true)
+        try {
+          await switchNetwork()
+        } catch (error) {
+          console.error('Failed to switch network:', error)
+        } finally {
+          setIsNetworkSwitching(false)
+        }
+      }
+    }
+
+    handleNetworkSwitch()
+  }, [isAuthenticated, isCorrectNetwork, switchNetwork, isNetworkSwitching])
+
   return (
     <ConnectButton.Custom>
       {({
         account,
         chain,
         openAccountModal,
-        openChainModal,
         openConnectModal,
-        authenticationStatus,
         mounted,
       }) => {
-        // Note: If your app doesn't use authentication, you
-        // can remove all 'authenticationStatus' checks
-        const ready = mounted && authenticationStatus !== 'loading'
-        const connected =
-          ready &&
-          account &&
-          chain &&
-          (!authenticationStatus ||
-            authenticationStatus === 'authenticated')
+        const ready = mounted && !isLoading
+        const connected = ready && account && chain
 
         return (
           <div
@@ -54,10 +70,10 @@ export default function ConnectWallet() {
                       boxShadow: '0 2px 4px rgba(75, 209, 111, 0.3)'
                     }}
                     onMouseOver={(e) => {
-                      e.currentTarget.style.backgroundColor = '#41b860';
+                      e.currentTarget.style.backgroundColor = '#41b860'
                     }}
                     onMouseOut={(e) => {
-                      e.currentTarget.style.backgroundColor = '#4BD16F';
+                      e.currentTarget.style.backgroundColor = '#4BD16F'
                     }}
                   >
                     <span style={{ marginRight: '8px' }}>
@@ -70,46 +86,32 @@ export default function ConnectWallet() {
                 )
               }
 
-              if (chain.unsupported) {
+              if (chain?.unsupported || !isCorrectNetwork) {
                 return (
-                  <button 
-                    onClick={openChainModal}
-                    style={{
-                      backgroundColor: '#FF4949',
-                      color: 'white',
-                      padding: '8px 16px',
-                      borderRadius: '9999px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontWeight: '500'
-                    }}
-                  >
-                    Wrong network
-                  </button>
+                  <div style={{
+                    backgroundColor: '#4BD16F',
+                    color: 'white',
+                    padding: '8px 16px',
+                    borderRadius: '9999px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <div style={{ 
+                      width: '16px', 
+                      height: '16px', 
+                      borderRadius: '50%', 
+                      border: '2px solid white', 
+                      borderTopColor: 'transparent',
+                      animation: 'spin 1s linear infinite'
+                    }} />
+                    Switching Network...
+                  </div>
                 )
               }
 
               return (
                 <div style={{ display: 'flex', gap: '12px' }}>
-                  <button
-                    onClick={openChainModal}
-                    style={{
-                      backgroundColor: '#E8FFF0',
-                      color: '#333',
-                      padding: '8px 12px',
-                      borderRadius: '9999px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontWeight: '500'
-                    }}
-                  >
-                    {chain.name}
-                  </button>
-
                   <button
                     onClick={openAccountModal}
                     style={{

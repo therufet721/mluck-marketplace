@@ -106,6 +106,9 @@ export default function PropertyPurchasePage() {
   // Add state for image animation
   const [isAnimating, setIsAnimating] = useState(false);
 
+  // Add state for network switching
+  const [isNetworkSwitching, setIsNetworkSwitching] = useState(false);
+
   // Handle touch start
   const onTouchStart = (e: React.TouchEvent) => {
     setTouchEnd(null);
@@ -480,11 +483,29 @@ export default function PropertyPurchasePage() {
     }
   };
 
-  // Update the button rendering logic
+  // Check and switch network automatically when connected
+  useEffect(() => {
+    const handleNetworkSwitch = async () => {
+      if (isConnected && !isCorrectNetwork && !isNetworkSwitching) {
+        setIsNetworkSwitching(true);
+        try {
+          await switchNetwork();
+        } catch (error) {
+          console.error('Failed to switch network:', error);
+        } finally {
+          setIsNetworkSwitching(false);
+        }
+      }
+    };
+
+    handleNetworkSwitch();
+  }, [isConnected, isCorrectNetwork, switchNetwork, isNetworkSwitching]);
+
+  // Update button rendering logic
   const renderPurchaseButton = () => {
     if (authLoading) return 'Connecting...';
     if (!isConnected) return 'Connect Wallet';
-    if (!isCorrectNetwork) return 'Switch Network';
+    if (!isCorrectNetwork) return 'Switching Network...';
     if (selectedSlots.length === 0) return 'Select Slots';
     if (balanceLoading) return 'Checking Balance...';
     
@@ -496,11 +517,11 @@ export default function PropertyPurchasePage() {
     return `Purchase ${selectedSlots.length} Slots`;
   };
 
-  // Update the button disabled state logic
+  // Update button disabled state logic
   const isButtonDisabled = () => {
     if (authLoading) return true;
     if (!isConnected) return true;
-    if (!isCorrectNetwork) return true;
+    if (!isCorrectNetwork || isNetworkSwitching) return true;
     if (selectedSlots.length === 0) return true;
     if (balanceLoading) return true;
     
@@ -886,7 +907,7 @@ export default function PropertyPurchasePage() {
             </div>
           </div>
           
-          {/* Network warnings */}
+          {/* Network warnings - updated to show switching state */}
           {!isConnected && !authLoading && (
             <div style={{
               backgroundColor: '#FFF4E5',
@@ -906,24 +927,18 @@ export default function PropertyPurchasePage() {
               borderRadius: '8px',
               fontSize: '0.9rem',
               display: 'flex',
-              flexDirection: 'column',
+              alignItems: 'center',
               gap: '8px'
             }}>
-              <span>Please switch to Polygon network</span>
-              <button 
-                onClick={switchNetwork}
-                style={{
-                  backgroundColor: '#FF9F00',
-                  color: 'white',
-                  border: 'none',
-                  padding: '5px 10px',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '0.8rem'
-                }}
-              >
-                Switch Network
-              </button>
+              <div style={{ 
+                width: '20px', 
+                height: '20px', 
+                borderRadius: '50%', 
+                border: '2px solid #FF9F00', 
+                borderTopColor: 'transparent',
+                animation: 'spin 1s linear infinite'
+              }} />
+              Switching to Polygon network...
             </div>
           )}
         </div>

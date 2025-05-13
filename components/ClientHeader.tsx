@@ -187,7 +187,7 @@ export default function ClientHeader({ title = 'Dashboard' }: ClientHeaderProps)
               boxShadow: '0 2px 6px rgba(0, 0, 0, 0.15)'
             }}>
               <ConnectButton 
-                showBalance={false}
+                showBalance={true}
                 chainStatus="icon"
                 accountStatus="avatar"
               />
@@ -359,7 +359,7 @@ export default function ClientHeader({ title = 'Dashboard' }: ClientHeaderProps)
                     marginRight: '8px',
                     boxShadow: '0 0 5px rgba(77, 209, 111, 0.8)'
                   }}/>
-                  {loading ? '0.00 MLUCK' : balance || '0.00 MLUCK'}
+                  {loading ? '0.00 USDT' : balance || '0.00 USDT'}
                 </div>
 
                 {/* RainbowKit Connect Button */}
@@ -371,7 +371,7 @@ export default function ClientHeader({ title = 'Dashboard' }: ClientHeaderProps)
                   boxShadow: '0 2px 6px rgba(0, 0, 0, 0.15)'
                 }}>
                   <ConnectButton 
-                    showBalance={false}
+                    showBalance={true}
                     chainStatus="icon"
                     accountStatus="address"
                   />

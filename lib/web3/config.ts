@@ -12,7 +12,7 @@ import {
 } from '@rainbow-me/rainbowkit/wallets';
 import { http } from 'viem';
 
-// Your WalletConnect project ID
+// Your WalletConnect project ID with fallback to prevent crashing
 const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || 'a936392574f639a268ff81897035b673';
 
 // Always use Polygon chain
@@ -40,14 +40,15 @@ const connectors = connectorsForWallets(
   }
 );
 
-// Create configuration with custom wallet list
+// Create configuration with custom wallet list and fallback mechanisms
 export const config = createConfig({
   connectors,
   chains,
   transports: {
     [polygon.id]: http(),
   },
+  // Ensure SSR is handled properly
   ssr: true,
 });
 
-export { chains }; 
+export { chains };

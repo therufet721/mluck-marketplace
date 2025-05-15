@@ -154,6 +154,30 @@ export default function ClientHeader({ title = 'Dashboard' }: ClientHeaderProps)
               </div>
             )}
 
+            {/* User Balance */}
+            <div style={{ 
+              background: 'rgba(77, 209, 111, 0.2)', 
+              color: 'white',
+              padding: '12px', 
+              borderRadius: '12px',
+              fontSize: '14px',
+              fontWeight: '600',
+              marginBottom: '15px',
+              boxShadow: '0 2px 6px rgba(77, 209, 111, 0.3)',
+              opacity: balance ? 1 : 0.5
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <div style={{ 
+                  width: '8px', 
+                  height: '8px', 
+                  backgroundColor: '#4BD16F', 
+                  borderRadius: '50%',
+                  marginRight: '8px',
+                  boxShadow: '0 0 5px rgba(77, 209, 111, 0.8)'
+                }}/>
+                {loading ? '0.00 USDT' : balance || '0.00 MLUCK'}
+              </div>
+            </div>
 
             {/* RainbowKit Connect Button */}
             <div style={{ 
@@ -211,7 +235,7 @@ export default function ClientHeader({ title = 'Dashboard' }: ClientHeaderProps)
           }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <div style={{ position: 'relative' }}>
-                <Link href="/dashboard" style={{ textDecoration: 'none' }}>
+                <Link href="/" style={{ textDecoration: 'none' }}>
                   <Image 
                     src="/Logo.svg" 
                     alt="Mluck Logo" 
@@ -311,7 +335,32 @@ export default function ClientHeader({ title = 'Dashboard' }: ClientHeaderProps)
                   </div>
                 )}
 
-
+                {/* User Balance */}
+                <div style={{ 
+                  background: 'rgba(77, 209, 111, 0.2)', 
+                  color: 'white',
+                  padding: '8px 16px', 
+                  borderRadius: '12px',
+                  marginRight: '10px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  display: 'flex',
+                  alignItems: 'center',
+                  minWidth: '150px',
+                  boxShadow: '0 2px 6px rgba(77, 209, 111, 0.3)',
+                  opacity: balance ? 1 : 0.5,
+                  transition: 'opacity 0.2s ease'
+                }}>
+                  <div style={{ 
+                    width: '8px', 
+                    height: '8px', 
+                    backgroundColor: '#4BD16F', 
+                    borderRadius: '50%',
+                    marginRight: '8px',
+                    boxShadow: '0 0 5px rgba(77, 209, 111, 0.8)'
+                  }}/>
+                  {loading ? '0.00 USDT' : balance || '0.00 USDT'}
+                </div>
 
                 {/* RainbowKit Connect Button */}
                 <div style={{ 

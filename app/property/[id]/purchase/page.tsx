@@ -1,12 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import {  getMarketplaceAvailableSlots } from '../../../../lib/slots';
 import { useWalletStatus, usePurchaseSlots, useTokenBalance, useTokenApproval, usePurchaseSlotsWithPromo } from '../../../../lib/web3/hooks';
-import { ADDRESSES, getPromoCode } from '../../../../lib/contracts';
-import { getProperty } from '../../../../lib/contracts';
+import { ADDRESSES, getPromoCode, getProperty, getCostUsingPromo } from '../../../../lib/contracts';
 import { getProvider } from '../../../../lib/slots';
 import Header from '../../../../components/Header';
 import { ethers } from 'ethers';
@@ -21,7 +20,7 @@ import { getPromocodeSignature } from '../../../../lib/api';
 const calculatePrice = (price: number) => {
   if (!price) return 0;
   // Convert from wei to USDT (18 decimals)
-  const calculated = Number(price) / 1e18;
+  const calculated = Number(price) / 1e6;
   console.log('Price calculation:', {
     rawPrice: price.toString(),
     calculated,
@@ -40,7 +39,7 @@ const formatPrice = (price: number | BigInt) => {
   }
   
   // Convert to number if BigInt
-  const priceAsNumber = typeof price === 'bigint' ? Number(price) / 1e18 : 
+  const priceAsNumber = typeof price === 'bigint' ? Number(price) / 1e6 : 
                         typeof price === 'number' ? calculatePrice(price) : 0;
   
   console.log('Formatting price:', {
@@ -155,6 +154,11 @@ export default function PropertyPurchasePage() {
   const [promocodeError, setPromocodeError] = useState<string | null>(null);
   const [promocodeSignature, setPromocodeSignature] = useState<string | null>(null);
   const [promocodeHash, setPromocodeHash] = useState<string | null>(null);
+  const [discountedCost, setDiscountedCost] = useState<number | null>(null);
+
+  // Add refs to track initial loads
+  const isInitialMount = useRef(true);
+  const isDataFetched = useRef(false);
 
   // Handle touch start
   const onTouchStart = (e: React.TouchEvent) => {
@@ -301,58 +305,68 @@ export default function PropertyPurchasePage() {
     }
   };
   
-  // Existing useEffect to fetch property details
+  // Modify the property details fetch - only fetch on initial load/refresh
   useEffect(() => {
     const fetchPropertyDetails = async () => {
-      try {
-        const provider = getProvider();
-        const details = await getProperty(provider as ethers.JsonRpcProvider, propertyId);
-        setPropertyDetails({
-          price: details.property.price,
-          fee: details.property.fee,
-          slotContract: details.property.slotContract,
-          status: details.status,
-          name: `Property #${propertyId}`
-        });
+      if (!isDataFetched.current) {
+        try {
+          const provider = getProvider();
+          const details = await getProperty(provider as ethers.JsonRpcProvider, propertyId);
+          setPropertyDetails({
+            price: details.property.price,
+            fee: details.property.fee,
+            slotContract: details.property.slotContract,
+            status: details.status,
+            name: `Property #${propertyId}`
+          });
 
-        await fetchPropertyImages(details.property.slotContract);
+          await fetchPropertyImages(details.property.slotContract);
 
-        // Get total supply from the slot contract
-        const { getTotalSupply } = await import('../../../../lib/contracts');
-        const totalSupply = await getTotalSupply(provider as ethers.JsonRpcProvider, details.property.slotContract);
-        setTotalSlots(Number(totalSupply));
-      } catch (error) {
-        console.error('Error fetching property details:', error);
+          // Get total supply from the slot contract
+          const { getTotalSupply } = await import('../../../../lib/contracts');
+          const totalSupply = await getTotalSupply(provider as ethers.JsonRpcProvider, details.property.slotContract);
+          setTotalSlots(Number(totalSupply));
+          
+          isDataFetched.current = true;
+        } catch (error) {
+          console.error('Error fetching property details:', error);
+        }
       }
     };
 
     if (propertyId) {
       fetchPropertyDetails();
     }
+    
+    // Add cleanup to reset on unmount
+    return () => {
+      isDataFetched.current = false;
+    };
   }, [propertyId]);
   
+  // Modify slots fetch to depend on totalSlots changes only
   useEffect(() => {
     const fetchSlots = async () => {
-      setLoading(true);
-      try {
-        const availableSlots = await getMarketplaceAvailableSlots(propertyId);
-        
-        const slotsData = Array.from({ length: totalSlots }, (_, i) => ({ 
-          id: i + 1, 
-          isSold: !availableSlots.includes(i + 1) 
-        }));
-        
-        setSlots(slotsData);
-      } catch (error) {
-        console.error('Error fetching slot data:', error);
-      } finally {
-        setLoading(false);
+      if (totalSlots > 0) {
+        setLoading(true);
+        try {
+          const availableSlots = await getMarketplaceAvailableSlots(propertyId);
+          
+          const slotsData = Array.from({ length: totalSlots }, (_, i) => ({ 
+            id: i + 1, 
+            isSold: !availableSlots.includes(i + 1) 
+          }));
+          
+          setSlots(slotsData);
+        } catch (error) {
+          console.error('Error fetching slot data:', error);
+        } finally {
+          setLoading(false);
+        }
       }
     };
 
-    if (propertyId) {
-      fetchSlots();
-    }
+    fetchSlots();
   }, [propertyId, totalSlots]);
   
   // Reset state when purchase is successful
@@ -392,48 +406,42 @@ export default function PropertyPurchasePage() {
     }
   }, [purchaseError, promoError]);
 
-  // Check if we need approval when slots are selected
+  // Modify approval checking to only run when needed
   useEffect(() => {
     const checkApprovalNeeded = async () => {
       if (!isConnected || selectedSlots.length === 0 || !propertyDetails) return;
       
+      // Only check allowance when slots are selected or changed
       const allowance = await checkAllowance(ADDRESSES.MARKETPLACE);
-      // Calculate required amount considering 18 decimals
       const totalCost = selectedSlots.length * (calculatePrice(propertyDetails.price) + calculatePrice(propertyDetails.fee));
-      // Add 10% buffer and format to user-friendly number
-      const requiredAmount = totalCost * 1.1;
+      const requiredAmount = totalCost * 1;
       setNeedsApproval(Number(allowance) < requiredAmount);
     };
 
-    checkApprovalNeeded();
+    // Only check when selection changes
+    if (selectedSlots.length > 0) {
+      checkApprovalNeeded();
+    }
   }, [isConnected, selectedSlots, checkAllowance, propertyDetails]);
 
-  // Add a useEffect to monitor balance changes
+  // Modify balance polling to be more efficient
   useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    
     if (isConnected) {
       // Initial balance check
       refetchBalance();
       
-      // Set up polling for balance updates
-      const interval = setInterval(refetchBalance, 5000); // Check every 5 seconds
-      
-      return () => clearInterval(interval);
-    }
-  }, [isConnected, refetchBalance]);
-
-  // Add useEffect to monitor selected slots and balance
-  useEffect(() => {
-    if (selectedSlots.length > 0 && balance && propertyDetails) {
-      const totalCost = calculateTotalCost(selectedSlots.length);
-      const currentBalance = parseUserBalance();
-      
-      if (currentBalance < totalCost) {
-        console.log('Insufficient balance:', currentBalance, 'needed:', totalCost);
-      } else {
-        console.log('Sufficient balance:', currentBalance, 'needed:', totalCost);
+      // Only set up polling if user has selected slots or is in purchase flow
+      if (selectedSlots.length > 0 || purchaseStep !== 'select') {
+        interval = setInterval(refetchBalance, 5000); // Only poll during active selection
       }
     }
-  }, [selectedSlots, balance, propertyDetails]);
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isConnected, refetchBalance, selectedSlots.length, purchaseStep]);
 
   // Add this effect to update from URL
   useEffect(() => {
@@ -483,10 +491,54 @@ export default function PropertyPurchasePage() {
     e.stopPropagation();
   };
 
+  // Function to fetch discounted cost from contract
+  const fetchDiscountedCost = useCallback(async () => {
+    if (!propertyId || !selectedSlots.length || !promocodeHash || !promocodeValid) {
+      setDiscountedCost(null);
+      return;
+    }
+
+    try {
+      const provider = getProvider();
+      // Use the imported function directly
+      const cost = await getCostUsingPromo(
+        provider as ethers.JsonRpcProvider,
+        propertyId,
+        selectedSlots.length,
+        promocodeHash
+      );
+      console.log('Contract discounted cost:', cost.toString());
+      // Convert from wei to USDT (6 decimals for USDT)
+      const costInUsdt = Number(cost) / 1e6;
+      setDiscountedCost(costInUsdt);
+      return costInUsdt;
+    } catch (error) {
+      console.error('Error fetching discounted cost:', error);
+      setDiscountedCost(null);
+      return null;
+    }
+  }, [propertyId, selectedSlots.length, promocodeHash, promocodeValid]);
+
+  // Update useEffect to call fetchDiscountedCost when promocode changes
+  useEffect(() => {
+    if (promocodeValid && promocodeHash) {
+      fetchDiscountedCost();
+    } else {
+      setDiscountedCost(null);
+    }
+  }, [promocodeValid, promocodeHash, selectedSlots.length, fetchDiscountedCost]);
+
   // Helper function to calculate discounted price
   const calculateDiscountedTotalCost = useCallback((slotCount: number) => {
     if (!propertyDetails) return 0;
     
+    // If we have a contract-calculated discounted cost, use that
+    if (discountedCost !== null && promocodeValid && promocodeHash) {
+      console.log('Using contract-calculated discount:', discountedCost);
+      return discountedCost;
+    }
+    
+    // Otherwise fall back to client-side calculation
     // Calculate base total in wei first
     const baseTotalInWei = BigInt(slotCount) * BigInt(propertyDetails.price + propertyDetails.fee);
     console.log('Base total in wei:', baseTotalInWei.toString());
@@ -497,7 +549,7 @@ export default function PropertyPurchasePage() {
       const remainingPercent = 100 - discountPercent;
       
       // Special case for 99% discount on 100 USDT to ensure we get exactly 1.00 USDT
-      if (discountPercent === 99 && Number(baseTotalInWei) / 1e18 === 100) {
+      if (discountPercent === 99 && Number(baseTotalInWei) / 1e6 === 100) {
         console.log('Special case: 99% discount on 100 USDT = 1.00 USDT');
         return 1.00; // Return exactly 1.00 USDT
       }
@@ -523,7 +575,7 @@ export default function PropertyPurchasePage() {
       });
       
       // Calculate and log the actual USDT amount for verification
-      const discountedUsdtAmount = Number(discountedTotalInWei) / 1e18;
+      const discountedUsdtAmount = Number(discountedTotalInWei) / 1e6;
       console.log(`Discounted amount: ${discountedUsdtAmount} USDT`);
       
       // Return the discounted total in USDT
@@ -531,8 +583,8 @@ export default function PropertyPurchasePage() {
     }
     
     // If no discount, return the base total in USDT
-    return Number(baseTotalInWei) / 1e18;
-  }, [propertyDetails, promocodeValid, promocodeDiscount]);
+    return Number(baseTotalInWei) / 1e6;
+  }, [propertyDetails, promocodeValid, promocodeDiscount, discountedCost, promocodeHash]);
 
   // Function to validate promocode
   const validatePromocode = useCallback(async () => {
@@ -579,6 +631,9 @@ export default function PropertyPurchasePage() {
       setPromocodeValid(true);
       setPromocodeDiscount(discountPercent);
       
+      // Fetch the discounted cost from the contract
+      await fetchDiscountedCost();
+      
       console.log('Final promocode state:', {
         valid: true,
         discount: discountPercent,
@@ -595,18 +650,23 @@ export default function PropertyPurchasePage() {
     } finally {
       setPromocodeLoading(false);
     }
-  }, [promocode, isConnected, account]);
+  }, [promocode, isConnected, account, fetchDiscountedCost]);
 
-  // Validate promocode when it changes
+  // Modify promo code validation to be more efficient
   useEffect(() => {
-    if (promocode && promocode.length > 0) {
-      validatePromocode();
-    } else {
-      setPromocodeValid(null);
-      setPromocodeDiscount(0);
-      setPromocodeSignature(null);
-      setPromocodeHash(null);
-    }
+    // Add debounce to avoid too many API calls while typing
+    const timer = setTimeout(() => {
+      if (promocode && promocode.length > 0) {
+        validatePromocode();
+      } else {
+        setPromocodeValid(null);
+        setPromocodeDiscount(0);
+        setPromocodeSignature(null);
+        setPromocodeHash(null);
+      }
+    }, 500); // Wait 500ms after typing stops
+    
+    return () => clearTimeout(timer);
   }, [promocode, validatePromocode]);
 
   // Use auth context
@@ -854,8 +914,8 @@ export default function PropertyPurchasePage() {
       }
       
       // Convert to USDT and add 10% buffer
-      const totalCost = Number(totalCostInWei) / 1e18;
-      const requiredAmountWithBuffer = totalCost * 1.1;
+      const totalCost = Number(totalCostInWei) / 1e6;
+      const requiredAmountWithBuffer = totalCost * 1;
       
       console.log('Approval calculation:', {
         baseTotalInWei: baseTotalInWei.toString(),
@@ -1657,7 +1717,8 @@ export default function PropertyPurchasePage() {
                             rawDiscountedValue: discountedValue,
                             formattedValue: formatPrice(discountedValue),
                             originalPrice: (propertyDetails.price + propertyDetails.fee) * selectedSlots.length,
-                            selectedSlots: selectedSlots.length
+                            selectedSlots: selectedSlots.length,
+                            usingContractPrice: discountedCost !== null
                           });
                           return formatPrice(discountedValue);
                         })()} ({Math.floor(promocodeDiscount * 100)}% off)
@@ -1665,7 +1726,7 @@ export default function PropertyPurchasePage() {
                     ) : (
                       ` ${formatPrice((propertyDetails.price + propertyDetails.fee) * selectedSlots.length)}`
                     )
-                  ) : '100'} USDT
+                  ) : '0'} USDT
                 </p>
                 
                 {balance && (

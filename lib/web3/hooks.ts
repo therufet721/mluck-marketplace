@@ -318,6 +318,7 @@ export function usePurchaseSlotsWithPromo() {
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [txHash, setTxHash] = useState<string | null>(null)
+  const { approve, checkAllowance } = useTokenApproval()
   
   // Reset state
   const reset = useCallback(() => {
@@ -332,7 +333,8 @@ export function usePurchaseSlotsWithPromo() {
     propertyAddress: string,
     slotIds: number[],
     promoHash: string,
-    signature: string
+    signature: string,
+    tokenAmount?: number
   ) => {
     if (!slotIds.length) return
     
@@ -340,26 +342,50 @@ export function usePurchaseSlotsWithPromo() {
       setLoading(true)
       setError(null)
       
+      // Import ethers for checksumming
+      const ethers = await import('ethers')
+      
+      // Checksum the property address
+      const checksummedPropertyAddress = ethers.getAddress(propertyAddress)
+      
       console.log('Starting purchase with promo:', {
-        propertyAddress,
+        propertyAddress: checksummedPropertyAddress,
         slotIds,
         promoHash,
         signature
       })
       
-      if (!propertyAddress) {
+      if (!checksummedPropertyAddress) {
         throw new Error('Property address not configured')
+      }
+      
+      // Check token allowance if tokenAmount is provided
+      if (tokenAmount) {
+        const spenderAddress = ADDRESSES.MARKETPLACE
+        const allowance = await checkAllowance(spenderAddress)
+        
+        if (allowance !== null) {
+          const currentAllowance = parseFloat(allowance)
+          
+          // If current allowance is less than required amount, request approval
+          if (currentAllowance < tokenAmount) {
+            console.log(`Current allowance (${currentAllowance}) is less than required (${tokenAmount}). Requesting approval...`)
+            await approve(spenderAddress, tokenAmount)
+          } else {
+            console.log(`Current allowance (${currentAllowance}) is sufficient for purchase (${tokenAmount})`)
+          }
+        }
       }
       
       // Call the buyWithPromo function
       console.log('Calling buyWithPromo with params:', {
-        propertyAddress,
+        propertyAddress: checksummedPropertyAddress,
         slotIds,
         promoHash,
         signature
       })
       
-      const tx = await buyWithPromo(propertyAddress, slotIds, promoHash, signature)
+      const tx = await buyWithPromo(checksummedPropertyAddress, slotIds, promoHash, signature)
       setTxHash(tx.hash)
       console.log('Transaction submitted:', tx.hash)
       
@@ -376,7 +402,7 @@ export function usePurchaseSlotsWithPromo() {
     } finally {
       setLoading(false)
     }
-  }, [buyWithPromo])
+  }, [buyWithPromo, checkAllowance, approve])
   
   return {
     purchaseWithPromo,

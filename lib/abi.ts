@@ -818,6 +818,35 @@ export const marketplaceAbi = [
     ],
     "stateMutability": "view",
     "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_property",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_slotsCount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "_promoHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getCostUsingPromo",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "cost",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
   }
 ] as const;
 

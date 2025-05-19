@@ -564,6 +564,34 @@ export const marketplaceAbi = [
   {
     "inputs": [
       {
+        "internalType": "address",
+        "name": "_property",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "_slots",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "_promoHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes",
+        "name": "signature",
+        "type": "bytes"
+      }
+    ],
+    "name": "buyWithPromo",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "bytes32",
         "name": "_promoCode",
         "type": "bytes32"

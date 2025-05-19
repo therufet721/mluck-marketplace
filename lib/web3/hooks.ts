@@ -328,25 +328,45 @@ export function usePurchaseSlotsWithPromo() {
   }, [])
   
   // Purchase slots with promo code
-  const purchaseWithPromo = useCallback(async (slotIds: number[], promoCode: string, signature: string) => {
+  const purchaseWithPromo = useCallback(async (
+    propertyAddress: string,
+    slotIds: number[],
+    promoHash: string,
+    signature: string
+  ) => {
     if (!slotIds.length) return
     
     try {
       setLoading(true)
       setError(null)
       
-      const propertyAddress = process.env.NEXT_PUBLIC_SLOT_ADDRESS || ''
+      console.log('Starting purchase with promo:', {
+        propertyAddress,
+        slotIds,
+        promoHash,
+        signature
+      })
+      
       if (!propertyAddress) {
         throw new Error('Property address not configured')
       }
       
-      const promoHash = getPromoCodeHash(promoCode)
+      // Call the buyWithPromo function
+      console.log('Calling buyWithPromo with params:', {
+        propertyAddress,
+        slotIds,
+        promoHash,
+        signature
+      })
       
       const tx = await buyWithPromo(propertyAddress, slotIds, promoHash, signature)
       setTxHash(tx.hash)
+      console.log('Transaction submitted:', tx.hash)
       
       // Wait for transaction to be mined
+      console.log('Waiting for transaction confirmation...')
       await tx.wait()
+      console.log('Transaction confirmed!')
       
       setSuccess(true)
     } catch (err: any) {
@@ -356,7 +376,7 @@ export function usePurchaseSlotsWithPromo() {
     } finally {
       setLoading(false)
     }
-  }, [buyWithPromo, getPromoCodeHash])
+  }, [buyWithPromo])
   
   return {
     purchaseWithPromo,

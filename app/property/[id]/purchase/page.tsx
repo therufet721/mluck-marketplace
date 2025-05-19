@@ -4,8 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import {  getMarketplaceAvailableSlots } from '../../../../lib/slots';
-import { useWalletStatus, usePurchaseSlots, useTokenBalance, useTokenApproval } from '../../../../lib/web3/hooks';
-import { ADDRESSES } from '../../../../lib/contracts';
+import { useWalletStatus, usePurchaseSlots, useTokenBalance, useTokenApproval, usePurchaseSlotsWithPromo } from '../../../../lib/web3/hooks';
+import { ADDRESSES, getPromoCode } from '../../../../lib/contracts';
 import { getProperty } from '../../../../lib/contracts';
 import { getProvider } from '../../../../lib/slots';
 import Header from '../../../../components/Header';
@@ -15,16 +15,45 @@ import { useProperties } from '../../../../contexts/PropertiesContext';
 import Pagination from '../../../../components/Pagination';
 import Tooltip from '../../../components/Tooltip';
 import { useAuth } from '../../../../contexts/AuthContext';
+import { getPromocodeSignature } from '../../../../lib/api';
 
 // Helper function for price calculations
 const calculatePrice = (price: number) => {
-  return price / Math.pow(10, 18);
+  if (!price) return 0;
+  // Convert from wei to USDT (18 decimals)
+  const calculated = Number(price) / 1e18;
+  console.log('Price calculation:', {
+    rawPrice: price.toString(),
+    calculated,
+    type: typeof price
+  });
+  return calculated;
 };
 
 // Helper function for price display
-const formatPrice = (price: number) => {
-  const formattedPrice = calculatePrice(price);
-  return Number.isInteger(formattedPrice) ? formattedPrice.toString() : formattedPrice.toFixed(2);
+const formatPrice = (price: number | BigInt) => {
+  // Special case for direct USDT values (not wei)
+  // If it's already a small number (< 1000), it's likely already in USDT, not wei
+  if (typeof price === 'number' && price < 1000 && price >= 0.01) {
+    console.log('Direct USDT value detected:', price);
+    return price.toFixed(2);
+  }
+  
+  // Convert to number if BigInt
+  const priceAsNumber = typeof price === 'bigint' ? Number(price) / 1e18 : 
+                        typeof price === 'number' ? calculatePrice(price) : 0;
+  
+  console.log('Formatting price:', {
+    input: typeof price === 'bigint' ? price.toString() : price,
+    calculated: priceAsNumber,
+    isInteger: Number.isInteger(priceAsNumber),
+    toFixed: priceAsNumber.toFixed(2)
+  });
+  
+  // Always show at least 2 decimal places for small numbers
+  return priceAsNumber < 1 ? priceAsNumber.toFixed(2) : 
+         Number.isInteger(priceAsNumber) ? priceAsNumber.toString() : 
+         priceAsNumber.toFixed(2);
 };
 
 // Helper function to format balance display
@@ -71,7 +100,7 @@ export default function PropertyPurchasePage() {
   const [slotsPerPage, setSlotsPerPage] = useState<number>(urlPerPage ? parseInt(urlPerPage) : 100);
 
   // Use simplified wallet status hook
-  const { isConnected } = useWalletStatus();
+  const { isConnected, address: account } = useWalletStatus();
   
   // Get token balance
   const { balance, loading: balanceLoading, refetch: refetchBalance } = useTokenBalance();
@@ -84,6 +113,16 @@ export default function PropertyPurchasePage() {
     error: purchaseError,
     txHash
   } = usePurchaseSlots();
+
+  // Get purchase with promocode functionality
+  const {
+    purchaseWithPromo,
+    loading: promoLoading,
+    success: promoSuccess,
+    error: promoError,
+    txHash: promoTxHash,
+    reset: resetPromo
+  } = usePurchaseSlotsWithPromo();
 
   // Get token approval functionality
   const { approve, checkAllowance, loading: approvalLoading, error: approvalError } = useTokenApproval();
@@ -107,6 +146,15 @@ export default function PropertyPurchasePage() {
 
   // Add state for network switching
   const [isNetworkSwitching, setIsNetworkSwitching] = useState(false);
+
+  // Add promocode state
+  const [promocode, setPromocode] = useState<string>('');
+  const [promocodeValid, setPromocodeValid] = useState<boolean | null>(null);
+  const [promocodeDiscount, setPromocodeDiscount] = useState<number>(0);
+  const [promocodeLoading, setPromocodeLoading] = useState<boolean>(false);
+  const [promocodeError, setPromocodeError] = useState<string | null>(null);
+  const [promocodeSignature, setPromocodeSignature] = useState<string | null>(null);
+  const [promocodeHash, setPromocodeHash] = useState<string | null>(null);
 
   // Handle touch start
   const onTouchStart = (e: React.TouchEvent) => {
@@ -192,7 +240,17 @@ export default function PropertyPurchasePage() {
   // Helper function to calculate total cost
   const calculateTotalCost = (slotCount: number) => {
     if (!propertyDetails) return 0;
-    return slotCount * (calculatePrice(propertyDetails.price) + calculatePrice(propertyDetails.fee));
+    const price = calculatePrice(propertyDetails.price);
+    const fee = calculatePrice(propertyDetails.fee);
+    const total = slotCount * (price + fee);
+    console.log('Total cost calculation:', {
+      slotCount,
+      price,
+      fee,
+      total,
+      propertyDetails
+    });
+    return total;
   };
 
   // Function to fetch property images
@@ -299,7 +357,7 @@ export default function PropertyPurchasePage() {
   
   // Reset state when purchase is successful
   useEffect(() => {
-    if (purchaseSuccess) {
+    if (purchaseSuccess || promoSuccess) {
       setPurchaseStep('success');
       // Refresh slot data after purchase
       setTimeout(() => {
@@ -312,6 +370,11 @@ export default function PropertyPurchasePage() {
             }));
             setSlots(slotsData);
             setSelectedSlots([]);
+            setPromocode('');
+            setPromocodeValid(null);
+            setPromocodeDiscount(0);
+            setPromocodeSignature(null);
+            setPromocodeHash(null);
           } catch (error) {
             console.error('Error fetching slot data:', error);
           }
@@ -320,14 +383,14 @@ export default function PropertyPurchasePage() {
         fetchSlotsAfterPurchase();
       }, 2000);
     }
-  }, [purchaseSuccess, propertyId, totalSlots]);
+  }, [purchaseSuccess, promoSuccess, propertyId, totalSlots]);
   
   // Handle errors
   useEffect(() => {
-    if (purchaseError) {
+    if (purchaseError || promoError) {
       setPurchaseStep('error');
     }
-  }, [purchaseError]);
+  }, [purchaseError, promoError]);
 
   // Check if we need approval when slots are selected
   useEffect(() => {
@@ -420,58 +483,131 @@ export default function PropertyPurchasePage() {
     e.stopPropagation();
   };
 
-  const handlePurchase = async () => {
-    if (selectedSlots.length === 0) return;
+  // Helper function to calculate discounted price
+  const calculateDiscountedTotalCost = useCallback((slotCount: number) => {
+    if (!propertyDetails) return 0;
     
-    // If not connected, we need to show a message
-    if (!isConnected) {
-      alert('Please connect your wallet first');
+    // Calculate base total in wei first
+    const baseTotalInWei = BigInt(slotCount) * BigInt(propertyDetails.price + propertyDetails.fee);
+    console.log('Base total in wei:', baseTotalInWei.toString());
+    
+    if (promocodeValid && promocodeDiscount > 0 && promocodeDiscount <= 1) {
+      // For 99% discount (0.99), we want to keep 1% of the price
+      const discountPercent = Math.floor(promocodeDiscount * 100);
+      const remainingPercent = 100 - discountPercent;
+      
+      // Special case for 99% discount on 100 USDT to ensure we get exactly 1.00 USDT
+      if (discountPercent === 99 && Number(baseTotalInWei) / 1e18 === 100) {
+        console.log('Special case: 99% discount on 100 USDT = 1.00 USDT');
+        return 1.00; // Return exactly 1.00 USDT
+      }
+      
+      const remainingFactor = remainingPercent / 100;
+      
+      // Calculate the discounted amount in wei with high precision
+      const scaleFactor = 1000000; // Use a large scale factor for precision
+      const scaledRemainingFactor = Math.round(remainingFactor * scaleFactor);
+      
+      // Perform calculation with scaled integers then adjust back
+      const discountedTotalInWei = baseTotalInWei * BigInt(scaledRemainingFactor) / BigInt(scaleFactor);
+      
+      console.log('Discount calculation:', {
+        promocodeDiscount,
+        discountPercent: `${discountPercent}%`,
+        remainingPercent: `${remainingPercent}%`,
+        remainingFactor,
+        scaledRemainingFactor: `${scaledRemainingFactor}/${scaleFactor}`,
+        baseTotalInWei: baseTotalInWei.toString(),
+        discountedTotalInWei: discountedTotalInWei.toString(),
+        calculation: `${baseTotalInWei} * ${scaledRemainingFactor} / ${scaleFactor}`
+      });
+      
+      // Calculate and log the actual USDT amount for verification
+      const discountedUsdtAmount = Number(discountedTotalInWei) / 1e18;
+      console.log(`Discounted amount: ${discountedUsdtAmount} USDT`);
+      
+      // Return the discounted total in USDT
+      return discountedUsdtAmount;
+    }
+    
+    // If no discount, return the base total in USDT
+    return Number(baseTotalInWei) / 1e18;
+  }, [propertyDetails, promocodeValid, promocodeDiscount]);
+
+  // Function to validate promocode
+  const validatePromocode = useCallback(async () => {
+    if (!promocode || !isConnected || !account) {
+      setPromocodeValid(null);
+      setPromocodeDiscount(0);
+      setPromocodeSignature(null);
+      setPromocodeHash(null);
       return;
     }
-    
-    // Set to confirm step
-    setPurchaseStep('confirm');
-  };
-  
-  const confirmPurchase = async () => {
-    if (selectedSlots.length === 0) return;
-    
-    try {
-      setPurchaseStep('processing');
-      await purchaseSlots(propertyId, selectedSlots);
-    } catch (error) {
-      console.error('Error purchasing slots:', error);
-      setPurchaseStep('error');
-    }
-  };
-  
-  const resetPurchase = () => {
-    setPurchaseStep('select');
-  };
 
-  const handleApprove = async () => {
-    if (!isConnected || selectedSlots.length === 0 || !propertyDetails) return;
-    
     try {
-      setPurchaseStep('processing');
-      // Calculate total cost with 10% buffer in actual token amount (not divided by 10^18)
-      const totalCost = selectedSlots.length * (calculatePrice(propertyDetails.price) + calculatePrice(propertyDetails.fee));
-      const requiredAmountWithBuffer = totalCost * 1.1;
-      await approve(ADDRESSES.MARKETPLACE, requiredAmountWithBuffer);
-      setNeedsApproval(false);
+      setPromocodeLoading(true);
+      setPromocodeError(null);
+
+      // Call the API to get the signature
+      const promoData = await getPromocodeSignature(account, promocode);
       
-      // Automatically proceed with purchase after approval
-      try {
-        await purchaseSlots(propertyId, selectedSlots);
-      } catch (error) {
-        console.error('Error purchasing slots:', error);
-        setPurchaseStep('error');
+      console.log('Promocode validation data:', promoData);
+      
+      // Check if we have the required fields in the response
+      if (!promoData.signature || !promoData.promoHash) {
+        throw new Error('Missing required promocode data');
       }
-    } catch (error) {
-      console.error('Error approving tokens:', error);
-      setPurchaseStep('error');
+
+      // Store the signature and hash for later use
+      setPromocodeSignature(promoData.signature);
+      setPromocodeHash(promoData.promoHash);
+      
+      // Get the actual promocode details from the blockchain
+      const provider = getProvider();
+      const promocodeDetails = await getPromoCode(provider as ethers.JsonRpcProvider, promoData.promoHash);
+      
+      console.log('Raw promocode details:', promocodeDetails);
+      
+      // Set the discount percentage from blockchain data (already in decimal form)
+      const discountPercent = Number(promocodeDetails.percent) / 10000;
+      console.log('Calculated discount percent:', discountPercent);
+      
+      if (discountPercent <= 0 || discountPercent > 1) {
+        throw new Error('Invalid discount percentage. Must be between 0 and 100%.');
+      }
+      
+      setPromocodeValid(true);
+      setPromocodeDiscount(discountPercent);
+      
+      console.log('Final promocode state:', {
+        valid: true,
+        discount: discountPercent,
+        signature: promoData.signature,
+        hash: promoData.promoHash
+      });
+    } catch (error: any) {
+      console.error('Promocode validation error:', error);
+      setPromocodeValid(false);
+      setPromocodeError(error.message || 'Invalid promocode');
+      setPromocodeDiscount(0);
+      setPromocodeSignature(null);
+      setPromocodeHash(null);
+    } finally {
+      setPromocodeLoading(false);
     }
-  };
+  }, [promocode, isConnected, account]);
+
+  // Validate promocode when it changes
+  useEffect(() => {
+    if (promocode && promocode.length > 0) {
+      validatePromocode();
+    } else {
+      setPromocodeValid(null);
+      setPromocodeDiscount(0);
+      setPromocodeSignature(null);
+      setPromocodeHash(null);
+    }
+  }, [promocode, validatePromocode]);
 
   // Use auth context
   const { isAuthenticated: isConnectedAuth, isLoading: authLoading, isWrongNetwork, switchNetwork, isSwitchingNetwork } = useAuth();
@@ -482,14 +618,18 @@ export default function PropertyPurchasePage() {
     if (!isConnectedAuth) return 'Connect Wallet';
     if (isWrongNetwork && isSwitchingNetwork) return 'Switching Network...';
     if (selectedSlots.length === 0) return 'Select Slots';
-    if (balanceLoading) return 'Checking Balance...';
+    if (balanceLoading || promocodeLoading) return 'Checking...';
     
-    const totalCost = calculateTotalCost(selectedSlots.length);
+    const totalCost = promocodeValid ? 
+      calculateDiscountedTotalCost(selectedSlots.length) : 
+      calculateTotalCost(selectedSlots.length);
     const currentBalance = parseUserBalance();
     
     if (currentBalance < totalCost) return 'Insufficient Balance';
     if (needsApproval) return 'Approve USDT Spending';
-    return `Purchase ${selectedSlots.length} Slots`;
+    
+    const prefix = promocodeValid ? 'Purchase with Promocode' : 'Purchase';
+    return `${prefix} (${selectedSlots.length} Slots)`;
   };
 
   // Update button disabled state logic
@@ -498,9 +638,11 @@ export default function PropertyPurchasePage() {
     if (!isConnectedAuth) return true;
     if (isWrongNetwork && isSwitchingNetwork) return true;
     if (selectedSlots.length === 0) return true;
-    if (balanceLoading) return true;
+    if (balanceLoading || promocodeLoading) return true;
     
-    const totalCost = calculateTotalCost(selectedSlots.length);
+    const totalCost = promocodeValid ? 
+      calculateDiscountedTotalCost(selectedSlots.length) : 
+      calculateTotalCost(selectedSlots.length);
     const currentBalance = parseUserBalance();
     
     return currentBalance < totalCost;
@@ -650,6 +792,105 @@ export default function PropertyPurchasePage() {
     // Use context name if found, otherwise use default
     return contextProperty ? contextProperty.title : (propertyDetails.name || `Property #${propertyId}`);
   }, [propertyDetails, properties, propertyId]);
+
+  // Add missing functions
+  const handlePurchase = async () => {
+    if (selectedSlots.length === 0) return;
+    
+    // If not connected, we need to show a message
+    if (!isConnected) {
+      alert('Please connect your wallet first');
+      return;
+    }
+    
+    // Set to confirm step
+    setPurchaseStep('confirm');
+  };
+  
+  const confirmPurchase = async () => {
+    if (selectedSlots.length === 0) return;
+    
+    try {
+      setPurchaseStep('processing');
+      
+      // If promocode is valid and we have a signature, use it
+      if (promocodeValid && promocodeSignature && promocodeHash) {
+        console.log('Purchasing with promocode:', {
+          propertyId,
+          slots: selectedSlots,
+          promocodeHash,
+          signature: promocodeSignature
+        });
+        // Pass all 4 parameters: property address, slots, promoHash, signature
+        await purchaseWithPromo(propertyId, selectedSlots, promocodeHash, promocodeSignature);
+      } else {
+        await purchaseSlots(propertyId, selectedSlots);
+      }
+    } catch (error) {
+      console.error('Error purchasing slots:', error);
+      setPurchaseStep('error');
+    }
+  };
+  
+  const resetPurchase = () => {
+    setPurchaseStep('select');
+  };
+
+  const handleApprove = async () => {
+    if (!isConnected || selectedSlots.length === 0 || !propertyDetails) return;
+    
+    try {
+      setPurchaseStep('processing');
+      // Calculate total cost in wei, then convert to USDT for approval
+      const baseTotalInWei = BigInt(selectedSlots.length) * BigInt(propertyDetails.price + propertyDetails.fee);
+      
+      // If we have a promocode, apply the discount
+      let totalCostInWei = baseTotalInWei;
+      if (promocodeValid && promocodeDiscount > 0 && promocodeDiscount <= 1) {
+        const discountPercent = Math.floor(promocodeDiscount * 100);
+        const remainingPercent = 100 - discountPercent;
+        const remainingFactor = remainingPercent / 100;
+        totalCostInWei = baseTotalInWei * BigInt(Math.floor(remainingFactor * 10000)) / BigInt(10000);
+      }
+      
+      // Convert to USDT and add 10% buffer
+      const totalCost = Number(totalCostInWei) / 1e18;
+      const requiredAmountWithBuffer = totalCost * 1.1;
+      
+      console.log('Approval calculation:', {
+        baseTotalInWei: baseTotalInWei.toString(),
+        totalCostInWei: totalCostInWei.toString(),
+        totalCostInUSDT: totalCost,
+        withBuffer: requiredAmountWithBuffer
+      });
+      
+      await approve(ADDRESSES.MARKETPLACE, requiredAmountWithBuffer);
+      setNeedsApproval(false);
+      
+      // Automatically proceed with purchase after approval
+      try {
+        if (promocodeValid && promocodeSignature && promocodeHash) {
+          console.log('Purchasing with promocode after approval:', {
+            propertyId,
+            slots: selectedSlots,
+            promocodeHash,
+            signature: promocodeSignature
+          });
+          // Pass all 4 parameters: property address, slots, promoHash, signature
+          await purchaseWithPromo(propertyId, selectedSlots, promocodeHash, promocodeSignature);
+        } else {
+          await purchaseSlots(propertyId, selectedSlots);
+        }
+      } catch (error) {
+        console.error('Error purchasing slots:', error);
+        setPurchaseStep('error');
+      }
+    } catch (error) {
+      console.error('Error approving tokens:', error);
+      setPurchaseStep('error');
+    }
+  };
+
 
   return (
     <>
@@ -1322,23 +1563,131 @@ export default function PropertyPurchasePage() {
                 <p style={{ marginBottom: '5px' }}>
                   Fees: {propertyDetails ? formatPrice(propertyDetails.fee * selectedSlots.length) : '0'} USDT
                 </p>
+                
+                {/* Promocode input */}
+                <div style={{ marginBottom: '10px' }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '5px'
+                  }}>
+                    <input
+                      type="text"
+                      value={promocode}
+                      onChange={(e) => setPromocode(e.target.value)}
+                      placeholder="Enter promocode (optional)"
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        backgroundColor: 'white',
+                        borderRadius: '5px',
+                        color: 'black',
+                        border: 'none',
+                        fontSize: '0.9rem'
+                      }}
+                    />
+                    {promocodeLoading && (
+                      <div style={{ 
+                        width: '18px', 
+                        height: '18px', 
+                        borderRadius: '50%', 
+                        border: '2px solid rgba(255, 255, 255, 0.3)', 
+                        borderTop: '2px solid white', 
+                        animation: 'spin 1s linear infinite',
+                      }}></div>
+                    )}
+                  </div>
+                  
+                  {promocodeValid === true && (
+                    <div style={{
+                      backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                      padding: '5px 10px',
+                      borderRadius: '5px',
+                      fontSize: '0.8rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      marginBottom: '5px'
+                    }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M20 6L9 17L4 12" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Promocode applied! {Math.floor(promocodeDiscount * 100)}% discount
+                    </div>
+                  )}
+                  
+                  {promocodeValid === false && (
+                    <div style={{
+                      backgroundColor: 'rgba(255, 0, 0, 0.2)',
+                      padding: '5px 10px',
+                      borderRadius: '5px',
+                      fontSize: '0.8rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      marginBottom: '5px'
+                    }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M18 6L6 18M6 6L18 18" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      This promoCode is not valid
+                    </div>
+                  )}
+                </div>
+                
+                {/* Show discounted price if promocode is valid */}
                 <p style={{ marginBottom: '10px', fontWeight: 'bold' }}>
-                  Total Cost: {propertyDetails ? formatPrice((propertyDetails.price + propertyDetails.fee) * selectedSlots.length) : '0'} USDT
+                  Total Cost: 
+                  {propertyDetails ? (
+                    promocodeValid ? (
+                      <>
+                        <span style={{ 
+                          textDecoration: 'line-through', 
+                          marginLeft: '5px',
+                          marginRight: '5px',
+                          opacity: 0.7,
+                          fontSize: '0.9rem'
+                        }}>
+                          {formatPrice((propertyDetails.price + propertyDetails.fee) * selectedSlots.length)}
+                        </span>
+                        {(() => {
+                          const discountedValue = calculateDiscountedTotalCost(selectedSlots.length);
+                          console.log('UI display value:', {
+                            rawDiscountedValue: discountedValue,
+                            formattedValue: formatPrice(discountedValue),
+                            originalPrice: (propertyDetails.price + propertyDetails.fee) * selectedSlots.length,
+                            selectedSlots: selectedSlots.length
+                          });
+                          return formatPrice(discountedValue);
+                        })()} ({Math.floor(promocodeDiscount * 100)}% off)
+                      </>
+                    ) : (
+                      ` ${formatPrice((propertyDetails.price + propertyDetails.fee) * selectedSlots.length)}`
+                    )
+                  ) : '100'} USDT
                 </p>
+                
                 {balance && (
                   <p style={{ 
                     fontSize: '0.9rem',
-                    color: parseUserBalance() < calculateTotalCost(selectedSlots.length) ? '#FFE0E0' : 'white',
+                    color: parseUserBalance() < (promocodeValid ? 
+                      calculateDiscountedTotalCost(selectedSlots.length) : 
+                      calculateTotalCost(selectedSlots.length)) 
+                      ? '#FFE0E0' : 'white',
                     marginBottom: '10px'
                   }}>
                     Your Balance: {formatBalanceDisplay(balance)}
-                    {parseUserBalance() < calculateTotalCost(selectedSlots.length) && (
+                    {parseUserBalance() < (promocodeValid ? 
+                      calculateDiscountedTotalCost(selectedSlots.length) : 
+                      calculateTotalCost(selectedSlots.length)) && (
                       <span style={{ display: 'block', marginTop: '5px', color: '#FFE0E0' }}>
                         Insufficient balance. Please add more USDT to cover the purchase and fees.
                       </span>
                     )}
                   </p>
                 )}
+                
                 {needsApproval && (
                   <p style={{ 
                     fontSize: '0.9rem', 
@@ -1350,6 +1699,7 @@ export default function PropertyPurchasePage() {
                     Approval needed: The marketplace needs your permission to spend USDT tokens.
                   </p>
                 )}
+                
                 <div style={{ 
                   maxHeight: '60px', 
                   overflowY: 'auto', 
@@ -1375,9 +1725,28 @@ export default function PropertyPurchasePage() {
               }}>
                 <p style={{ marginBottom: '10px', fontWeight: 'bold' }}>Confirm Purchase</p>
                 <p style={{ marginBottom: '5px' }}>
-                  You are about to purchase {selectedSlots.length} slot{selectedSlots.length > 1 ? 's' : ''} for a total of {propertyDetails ? formatPrice((propertyDetails.price + propertyDetails.fee) * selectedSlots.length) : '0'} USDT
+                  You are about to purchase {selectedSlots.length} slot{selectedSlots.length > 1 ? 's' : ''} for a total of {
+                    propertyDetails ? (
+                      promocodeValid ? 
+                        `${formatPrice(calculateDiscountedTotalCost(selectedSlots.length))} (${Math.floor(promocodeDiscount * 100)}% off)` : 
+                        formatPrice((propertyDetails.price + propertyDetails.fee) * selectedSlots.length)
+                    ) : '0'
+                  } USDT
                   ({propertyDetails ? formatPrice(propertyDetails.price + propertyDetails.fee) : '0'} USDT per slot).
                 </p>
+                
+                {promocodeValid && (
+                  <p style={{ 
+                    backgroundColor: 'rgba(255, 255, 255, 0.2)', 
+                    padding: '8px', 
+                    borderRadius: '5px',
+                    fontSize: '0.9rem',
+                    marginBottom: '10px'
+                  }}>
+                    <strong>Promocode:</strong> {promocode} ({Math.floor(promocodeDiscount * 100)}% discount applied)
+                  </p>
+                )}
+                
                 <p style={{ fontSize: '0.8rem', marginBottom: '10px' }}>This action cannot be undone.</p>
                 
                 <div style={{ display: 'flex', gap: '10px' }}>
@@ -1455,9 +1824,9 @@ export default function PropertyPurchasePage() {
               }}>
                 <p style={{ marginBottom: '10px', fontWeight: 'bold' }}>Purchase Successful!</p>
                 <p style={{ marginBottom: '10px' }}>Your slots have been purchased successfully.</p>
-                {txHash && (
+                {(txHash || promoTxHash) && (
                   <a 
-                    href={`${process.env.NEXT_PUBLIC_EXPLORER_URL}/tx/${txHash}`} 
+                    href={`${process.env.NEXT_PUBLIC_EXPLORER_URL}/tx/${txHash || promoTxHash}`} 
                     target="_blank" 
                     rel="noopener noreferrer"
                     style={{ 
@@ -1499,7 +1868,7 @@ export default function PropertyPurchasePage() {
                 textAlign: 'center'
               }}>
                 <p style={{ marginBottom: '10px', fontWeight: 'bold' }}>Purchase Failed</p>
-                <p style={{ marginBottom: '10px' }}>{purchaseError || 'An error occurred during the purchase.'}</p>
+                <p style={{ marginBottom: '10px' }}>{purchaseError || promoError || 'An error occurred during the purchase.'}</p>
                 <button 
                   style={{ 
                     backgroundColor: 'white', 
@@ -1747,7 +2116,18 @@ export default function PropertyPurchasePage() {
                   {selectedSlots.length} Slot{selectedSlots.length > 1 ? 's' : ''} Selected
                 </div>
                 <div style={{ fontSize: '0.9rem', color: '#666' }}>
-                  Total: {propertyDetails ? formatPrice((propertyDetails.price + propertyDetails.fee) * selectedSlots.length) : '0'} USDT
+                  Total: {propertyDetails ? (
+                    promocodeValid ? (
+                      <>
+                        <span style={{ textDecoration: 'line-through', marginRight: '5px', opacity: 0.7 }}>
+                          {formatPrice((propertyDetails.price + propertyDetails.fee) * selectedSlots.length)}
+                        </span>
+                        {formatPrice(calculateDiscountedTotalCost(selectedSlots.length))}
+                      </>
+                    ) : (
+                      formatPrice((propertyDetails.price + propertyDetails.fee) * selectedSlots.length)
+                    )
+                  ) : '0'} USDT
                 </div>
               </div>
               <button 

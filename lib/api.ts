@@ -183,4 +183,34 @@ export async function getPropertySlots(propertyAddress: string): Promise<any> {
     console.error("Error fetching property slots:", error);
     return [];
   }
+}
+
+export async function getPromocodeSignature(address: string, promocode: string) {
+  try {
+    const response = await fetch(`${API_URL}/api/v1/promocode/sign?address=${address}&word=${promocode}`);
+    
+    if (!response.ok) {
+      throw new Error(`Error fetching promocode signature: ${response.status} ${response.statusText}`);
+    }
+    
+    const responseData = await response.json();
+    console.log('Raw promocode API response:', responseData);
+    
+    // Handle the nested data structure from the API
+    const data = responseData.data || responseData;
+    
+    if (!data || typeof data !== 'object') {
+      throw new Error('Invalid response data from promocode signature API');
+    }
+    
+    // Map the API response fields to what our code expects
+    return {
+      promoHash: data.promoHash || data.hash, // Support both field names
+      signature: data.signature,
+      percent: data.percent // Remove default value, we'll get it from blockchain
+    };
+  } catch (error) {
+    console.error('Failed to fetch promocode signature:', error);
+    throw error;
+  }
 } 

@@ -1,0 +1,40 @@
+Cursor Rules for MLuck Marketplace
+🔨 File Naming
+Use PascalCase for React components: SlotCard.tsx, PropertyPage.tsx
+
+Use camelCase for utility and hook files: useWalletStatus.ts, getSlotData.ts
+
+Use kebab-case for SCSS/CSS files: slot-card.scss
+
+
+Component Rules
+One component per file
+
+Use .tsx for any file that includes JSX
+
+Export components as default
+
+Keep component props typed with TypeScript interfaces
+
+Avoid inline styling; use SCSS or Tailwind if applied globally
+
+Prefix with use, e.g., useTokenApproval
+
+Only call hooks at the top level of components or custom hooks
+
+Use useMemo, useCallback, and useEffect for optimization
+
+Keep all API calls in /lib/api.ts or submodules like /lib/property.ts
+
+Keep all smart contract logic in hooks inside /hooks, e.g., usePurchaseSlot.ts
+
+Use Ethers.js via wagmi for blockchain interaction
+
+Contracts and ABIs must be centralized under /contracts/
+
+Don’ts
+Don’t use inline fetch — use centralized lib/api.ts
+
+Don’t hardcode contract addresses — always use env vars
+
+Don’t mix styling methods in the same component (choose SCSS or Tailwind per file)  

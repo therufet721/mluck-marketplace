@@ -246,7 +246,11 @@ function SimplePropertyCard({ property, userAddress }: { property: Property, use
             padding: '5px 15px',
             fontSize: '0.85rem',
             fontWeight: '500',
-            cursor: 'not-allowed'
+            cursor: 'not-allowed',
+            display: 'inline-block',
+            whiteSpace: 'nowrap',
+            textAlign: 'center',
+            minWidth: '100px'
           }}>
             Coming Soon
           </div>

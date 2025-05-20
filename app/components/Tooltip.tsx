@@ -9,11 +9,15 @@ interface TooltipProps {
   placement?: 'top' | 'right' | 'bottom' | 'left';
 }
 
+// Simple workaround for React 19 ref handling with Tippy.js
 const Tooltip: React.FC<TooltipProps> = ({
   content,
   children,
   placement = 'top'
 }) => {
+  // Using React.cloneElement here without modifying refs
+  const childElement = React.cloneElement(children);
+  
   return (
     <Tippy
       content={content}
@@ -25,9 +29,12 @@ const Tooltip: React.FC<TooltipProps> = ({
       maxWidth={300}
       className="!bg-gray-800 !text-white !text-sm !px-3 !py-2 !rounded-lg !shadow-lg"
     >
-      {children}
+      {childElement}
     </Tippy>
   );
 };
+
+// Add display name for React DevTools
+Tooltip.displayName = 'Tooltip';
 
 export default Tooltip; 

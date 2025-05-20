@@ -6,6 +6,7 @@ import Image from 'next/image';
 import {  getMarketplaceAvailableSlots } from '../../../../lib/slots';
 import { useWalletStatus, usePurchaseSlots, useTokenBalance, useTokenApproval, usePurchaseSlotsWithPromo } from '../../../../lib/web3/hooks';
 import { ADDRESSES, getPromoCode, getProperty, getCostUsingPromo } from '../../../../lib/contracts';
+import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { getProvider } from '../../../../lib/slots';
 import Header from '../../../../components/Header';
 import { ethers } from 'ethers';
@@ -19,35 +20,20 @@ import { getPromocodeSignature } from '../../../../lib/api';
 // Helper function for price calculations
 const calculatePrice = (price: number) => {
   if (!price) return 0;
-  // Convert from wei to USDT (18 decimals)
-  const calculated = Number(price) / 1e6;
-  console.log('Price calculation:', {
-    rawPrice: price.toString(),
-    calculated,
-    type: typeof price
-  });
-  return calculated;
+  // Convert from wei to USDT (6 decimals)
+  return Number(price) / 1e6;
 };
 
 // Helper function for price display
 const formatPrice = (price: number | BigInt) => {
   // Special case for direct USDT values (not wei)
-  // If it's already a small number (< 1000), it's likely already in USDT, not wei
   if (typeof price === 'number' && price < 1000 && price >= 0.01) {
-    console.log('Direct USDT value detected:', price);
     return price.toFixed(2);
   }
   
   // Convert to number if BigInt
   const priceAsNumber = typeof price === 'bigint' ? Number(price) / 1e6 : 
-                        typeof price === 'number' ? calculatePrice(price) : 0;
-  
-  console.log('Formatting price:', {
-    input: typeof price === 'bigint' ? price.toString() : price,
-    calculated: priceAsNumber,
-    isInteger: Number.isInteger(priceAsNumber),
-    toFixed: priceAsNumber.toFixed(2)
-  });
+                       typeof price === 'number' ? calculatePrice(price) : 0;
   
   // Always show at least 2 decimal places for small numbers
   return priceAsNumber < 1 ? priceAsNumber.toFixed(2) : 
@@ -246,15 +232,7 @@ export default function PropertyPurchasePage() {
     if (!propertyDetails) return 0;
     const price = calculatePrice(propertyDetails.price);
     const fee = calculatePrice(propertyDetails.fee);
-    const total = slotCount * (price + fee);
-    console.log('Total cost calculation:', {
-      slotCount,
-      price,
-      fee,
-      total,
-      propertyDetails
-    });
-    return total;
+    return slotCount * (price + fee);
   };
 
   // Function to fetch property images
@@ -507,7 +485,6 @@ export default function PropertyPurchasePage() {
         selectedSlots.length,
         promocodeHash
       );
-      console.log('Contract discounted cost:', cost.toString());
       // Convert from wei to USDT (6 decimals for USDT)
       const costInUsdt = Number(cost) / 1e6;
       setDiscountedCost(costInUsdt);
@@ -534,52 +511,26 @@ export default function PropertyPurchasePage() {
     
     // If we have a contract-calculated discounted cost, use that
     if (discountedCost !== null && promocodeValid && promocodeHash) {
-      console.log('Using contract-calculated discount:', discountedCost);
       return discountedCost;
     }
     
     // Otherwise fall back to client-side calculation
-    // Calculate base total in wei first
     const baseTotalInWei = BigInt(slotCount) * BigInt(propertyDetails.price + propertyDetails.fee);
-    console.log('Base total in wei:', baseTotalInWei.toString());
     
     if (promocodeValid && promocodeDiscount > 0 && promocodeDiscount <= 1) {
-      // For 99% discount (0.99), we want to keep 1% of the price
       const discountPercent = Math.floor(promocodeDiscount * 100);
       const remainingPercent = 100 - discountPercent;
       
       // Special case for 99% discount on 100 USDT to ensure we get exactly 1.00 USDT
       if (discountPercent === 99 && Number(baseTotalInWei) / 1e6 === 100) {
-        console.log('Special case: 99% discount on 100 USDT = 1.00 USDT');
-        return 1.00; // Return exactly 1.00 USDT
+        return 1.00;
       }
       
       const remainingFactor = remainingPercent / 100;
-      
-      // Calculate the discounted amount in wei with high precision
       const scaleFactor = 1000000; // Use a large scale factor for precision
       const scaledRemainingFactor = Math.round(remainingFactor * scaleFactor);
-      
-      // Perform calculation with scaled integers then adjust back
       const discountedTotalInWei = baseTotalInWei * BigInt(scaledRemainingFactor) / BigInt(scaleFactor);
-      
-      console.log('Discount calculation:', {
-        promocodeDiscount,
-        discountPercent: `${discountPercent}%`,
-        remainingPercent: `${remainingPercent}%`,
-        remainingFactor,
-        scaledRemainingFactor: `${scaledRemainingFactor}/${scaleFactor}`,
-        baseTotalInWei: baseTotalInWei.toString(),
-        discountedTotalInWei: discountedTotalInWei.toString(),
-        calculation: `${baseTotalInWei} * ${scaledRemainingFactor} / ${scaleFactor}`
-      });
-      
-      // Calculate and log the actual USDT amount for verification
-      const discountedUsdtAmount = Number(discountedTotalInWei) / 1e6;
-      console.log(`Discounted amount: ${discountedUsdtAmount} USDT`);
-      
-      // Return the discounted total in USDT
-      return discountedUsdtAmount;
+      return Number(discountedTotalInWei) / 1e6;
     }
     
     // If no discount, return the base total in USDT
@@ -600,13 +551,11 @@ export default function PropertyPurchasePage() {
       setPromocodeLoading(true);
       setPromocodeError(null);
 
-      // Call the API to get the signature
-      const promoData = await getPromocodeSignature(account, promocode);
-      
-      console.log('Promocode validation data:', promoData);
-      
-      // Check if we have the required fields in the response
-      if (!promoData.signature || !promoData.promoHash) {
+          // Call the API to get the signature
+    const promoData = await getPromocodeSignature(account, promocode);
+    
+    // Check if we have the required fields in the response
+    if (!promoData.signature || !promoData.promoHash) {
         throw new Error('Missing required promocode data');
       }
 
@@ -614,15 +563,12 @@ export default function PropertyPurchasePage() {
       setPromocodeSignature(promoData.signature);
       setPromocodeHash(promoData.promoHash);
       
-      // Get the actual promocode details from the blockchain
-      const provider = getProvider();
-      const promocodeDetails = await getPromoCode(provider as ethers.JsonRpcProvider, promoData.promoHash);
-      
-      console.log('Raw promocode details:', promocodeDetails);
-      
-      // Set the discount percentage from blockchain data (already in decimal form)
-      const discountPercent = Number(promocodeDetails.percent) / 10000;
-      console.log('Calculated discount percent:', discountPercent);
+          // Get the actual promocode details from the blockchain
+    const provider = getProvider();
+    const promocodeDetails = await getPromoCode(provider as ethers.JsonRpcProvider, promoData.promoHash);
+    
+    // Set the discount percentage from blockchain data (already in decimal form)
+    const discountPercent = Number(promocodeDetails.percent) / 10000;
       
       if (discountPercent <= 0 || discountPercent > 1) {
         throw new Error('Invalid discount percentage. Must be between 0 and 100%.');
@@ -631,15 +577,8 @@ export default function PropertyPurchasePage() {
       setPromocodeValid(true);
       setPromocodeDiscount(discountPercent);
       
-      // Fetch the discounted cost from the contract
-      await fetchDiscountedCost();
-      
-      console.log('Final promocode state:', {
-        valid: true,
-        discount: discountPercent,
-        signature: promoData.signature,
-        hash: promoData.promoHash
-      });
+          // Fetch the discounted cost from the contract
+    await fetchDiscountedCost();
     } catch (error: any) {
       console.error('Promocode validation error:', error);
       setPromocodeValid(false);
@@ -675,6 +614,7 @@ export default function PropertyPurchasePage() {
   // Update button rendering logic
   const renderPurchaseButton = () => {
     if (authLoading) return 'Connecting...';
+    // Don't return component directly - return text for consistency
     if (!isConnectedAuth) return 'Connect Wallet';
     if (isWrongNetwork && isSwitchingNetwork) return 'Switching Network...';
     if (selectedSlots.length === 0) return 'Select Slots';
@@ -695,7 +635,7 @@ export default function PropertyPurchasePage() {
   // Update button disabled state logic
   const isButtonDisabled = () => {
     if (authLoading) return true;
-    if (!isConnectedAuth) return true;
+    if (!isConnectedAuth) return false;
     if (isWrongNetwork && isSwitchingNetwork) return true;
     if (selectedSlots.length === 0) return true;
     if (balanceLoading || promocodeLoading) return true;
@@ -837,10 +777,7 @@ export default function PropertyPurchasePage() {
     setIsImageExpanded(!isImageExpanded);
   };
 
-  // Add debug logging to see when images change
-  useEffect(() => {
-    console.log('Property images state updated:', propertyImages);
-  }, [propertyImages]);
+  // No longer needed - removed debug logging for image changes
 
   // Function to get property name
   const getPropertyName = useCallback(() => {
@@ -875,12 +812,6 @@ export default function PropertyPurchasePage() {
       
       // If promocode is valid and we have a signature, use it
       if (promocodeValid && promocodeSignature && promocodeHash) {
-        console.log('Purchasing with promocode:', {
-          propertyId,
-          slots: selectedSlots,
-          promocodeHash,
-          signature: promocodeSignature
-        });
         // Pass all 4 parameters: property address, slots, promoHash, signature
         await purchaseWithPromo(propertyId, selectedSlots, promocodeHash, promocodeSignature);
       } else {
@@ -917,25 +848,12 @@ export default function PropertyPurchasePage() {
       const totalCost = Number(totalCostInWei) / 1e6;
       const requiredAmountWithBuffer = totalCost * 1;
       
-      console.log('Approval calculation:', {
-        baseTotalInWei: baseTotalInWei.toString(),
-        totalCostInWei: totalCostInWei.toString(),
-        totalCostInUSDT: totalCost,
-        withBuffer: requiredAmountWithBuffer
-      });
-      
       await approve(ADDRESSES.MARKETPLACE, requiredAmountWithBuffer);
       setNeedsApproval(false);
       
       // Automatically proceed with purchase after approval
       try {
         if (promocodeValid && promocodeSignature && promocodeHash) {
-          console.log('Purchasing with promocode after approval:', {
-            propertyId,
-            slots: selectedSlots,
-            promocodeHash,
-            signature: promocodeSignature
-          });
           // Pass all 4 parameters: property address, slots, promoHash, signature
           await purchaseWithPromo(propertyId, selectedSlots, promocodeHash, promocodeSignature);
         } else {
@@ -1711,17 +1629,7 @@ export default function PropertyPurchasePage() {
                         }}>
                           {formatPrice((propertyDetails.price + propertyDetails.fee) * selectedSlots.length)}
                         </span>
-                        {(() => {
-                          const discountedValue = calculateDiscountedTotalCost(selectedSlots.length);
-                          console.log('UI display value:', {
-                            rawDiscountedValue: discountedValue,
-                            formattedValue: formatPrice(discountedValue),
-                            originalPrice: (propertyDetails.price + propertyDetails.fee) * selectedSlots.length,
-                            selectedSlots: selectedSlots.length,
-                            usingContractPrice: discountedCost !== null
-                          });
-                          return formatPrice(discountedValue);
-                        })()} ({Math.floor(promocodeDiscount * 100)}% off)
+                        {formatPrice(calculateDiscountedTotalCost(selectedSlots.length))} ({Math.floor(promocodeDiscount * 100)}% off)
                       </>
                     ) : (
                       ` ${formatPrice((propertyDetails.price + propertyDetails.fee) * selectedSlots.length)}`
@@ -1963,10 +1871,31 @@ export default function PropertyPurchasePage() {
                   fontSize: '1rem',
                   transition: 'background-color 0.2s ease',
                   boxShadow: '0 2px 4px rgba(75, 209, 111, 0.3)',
-                  opacity: isButtonDisabled() ? 0.7 : 1
+                  opacity: isButtonDisabled() ? 0.7 : 1,
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center'
                 }}
               >
-                {renderPurchaseButton()}
+                {!isConnectedAuth ? (
+                  <ConnectButton.Custom>
+                    {({ account, chain, openConnectModal }) => (
+                      <div 
+                        onClick={openConnectModal} 
+                        style={{ 
+                          width: '100%', 
+                          display: 'flex', 
+                          justifyContent: 'center',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Connect Wallet
+                      </div>
+                    )}
+                  </ConnectButton.Custom>
+                ) : (
+                  renderPurchaseButton()
+                )}
               </button>
             )}
           </div>
@@ -2202,12 +2131,34 @@ export default function PropertyPurchasePage() {
                   fontWeight: '500',
                   fontSize: '0.9rem',
                   transition: 'background-color 0.2s ease',
-                  opacity: isButtonDisabled() ? 0.7 : 1
+                  opacity: isButtonDisabled() ? 0.7 : 1,
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  minWidth: '120px'
                 }}
                 onClick={handleButtonClick}
                 disabled={isButtonDisabled()}
               >
-                {renderPurchaseButton()}
+                {!isConnectedAuth ? (
+                  <ConnectButton.Custom>
+                    {({ account, chain, openConnectModal }) => (
+                      <div 
+                        onClick={openConnectModal} 
+                        style={{ 
+                          width: '100%', 
+                          display: 'flex', 
+                          justifyContent: 'center',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Connect Wallet
+                      </div>
+                    )}
+                  </ConnectButton.Custom>
+                ) : (
+                  renderPurchaseButton()
+                )}
               </button>
             </div>
           </div>

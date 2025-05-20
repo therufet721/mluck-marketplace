@@ -541,60 +541,71 @@ useEffect(() => {
 }, [selectedSlots, promocodeValid, promocodeHash, fetchDiscountedCost]);
 
   // Function to validate promocode
-const validatePromocode = useCallback(async () => {
-  if (!promocode || !account) {
-    setPromocodeValid(null);
-    setPromocodeDiscount(0);
-    setPromocodeSignature(null);
-    setPromocodeHash(null);
-    setDiscountedCost(null);
-    return;
-  }
+  const validatePromocode = useCallback(async () => {
+    // Add direct debug logs
+    console.log('validatePromocode called with:', { 
+      promocode, 
+      account, 
+      walletInfo: {
+        address: account,
+        isConnected
+      }
+    });
 
-  try {
-    setPromocodeLoading(true);
-    setPromocodeError(null);
-
-    // Call the API to get the signature
-    const promoData = await getPromocodeSignature(account, promocode);
-    
-    // Check if we have the required fields in the response
-    if (!promoData.signature || !promoData.promoHash) {
-      throw new Error('Missing required promocode data');
+    if (!promocode || !account) {
+      console.log('Validation aborted - missing promocode or account:', { promocode, account });
+      setPromocodeValid(null);
+      setPromocodeDiscount(0);
+      setPromocodeSignature(null);
+      setPromocodeHash(null);
+      setDiscountedCost(null);
+      return;
     }
 
-    // Store the signature and hash for later use
-    setPromocodeSignature(promoData.signature);
-    setPromocodeHash(promoData.promoHash);
-    
-    // Get the actual promocode details from the blockchain
-    const provider = getProvider();
-    const promocodeDetails = await getPromoCode(provider as ethers.JsonRpcProvider, promoData.promoHash);
-    
-    // Set the discount percentage from blockchain data (already in decimal form)
-    const discountPercent = Number(promocodeDetails.percent) / 10000;
-    
-    if (discountPercent <= 0 || discountPercent > 1) {
-      throw new Error('Invalid discount percentage. Must be between 0 and 100%.');
+    try {
+      setPromocodeLoading(true);
+      setPromocodeError(null);
+
+      // Call the API to get the signature
+      const promoData = await getPromocodeSignature(account, promocode);
+      
+      // Check if we have the required fields in the response
+      if (!promoData.signature || !promoData.promoHash) {
+        throw new Error('Missing required promocode data');
+      }
+
+      // Store the signature and hash for later use
+      setPromocodeSignature(promoData.signature);
+      setPromocodeHash(promoData.promoHash);
+      
+      // Get the actual promocode details from the blockchain
+      const provider = getProvider();
+      const promocodeDetails = await getPromoCode(provider as ethers.JsonRpcProvider, promoData.promoHash);
+      
+      // Set the discount percentage from blockchain data (already in decimal form)
+      const discountPercent = Number(promocodeDetails.percent) / 10000;
+      
+      if (discountPercent <= 0 || discountPercent > 1) {
+        throw new Error('Invalid discount percentage. Must be between 0 and 100%.');
+      }
+      
+      setPromocodeValid(true);
+      setPromocodeDiscount(discountPercent);
+      
+      // Fetch the discounted cost from the contract is handled separately
+      // to avoid nested loading states
+    } catch (error: any) {
+      console.error('Promocode validation error:', error);
+      setPromocodeValid(false);
+      setPromocodeError(error.message || 'Invalid promocode');
+      setPromocodeDiscount(0);
+      setPromocodeSignature(null);
+      setPromocodeHash(null);
+      setDiscountedCost(null);
+    } finally {
+      setPromocodeLoading(false);
     }
-    
-    setPromocodeValid(true);
-    setPromocodeDiscount(discountPercent);
-    
-    // Fetch the discounted cost from the contract is handled separately
-    // to avoid nested loading states
-  } catch (error: any) {
-    console.error('Promocode validation error:', error);
-    setPromocodeValid(false);
-    setPromocodeError(error.message || 'Invalid promocode');
-    setPromocodeDiscount(0);
-    setPromocodeSignature(null);
-    setPromocodeHash(null);
-    setDiscountedCost(null);
-  } finally {
-    setPromocodeLoading(false);
-  }
-}, [promocode, account]);
+  }, [promocode, account]);
 
   // Modify promo code validation to be more efficient
   useEffect(() => {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useAccount, useWalletClient, useReadContract } from 'wagmi'
+import { useAccount, useWalletClient, useReadContract, useDisconnect, useChainId, useConfig } from 'wagmi'
 import { ethers } from 'ethers'
 import { useState, useEffect, useCallback } from 'react'
 import { getClaimableAssets, getClaimHistory, claimAsset, claimAllAssets } from '../api'
@@ -17,19 +17,21 @@ const ACTIVE_CHAIN_ID = POLYGON_CHAIN_ID;
 
 // Hook for handling network changes
 export function useNetworkChangeEffect() {
+  const { disconnect } = useDisconnect();
+  const chainId = useChainId();
+  
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.ethereum) {
-      const handleChainChanged = () => {
-        window.location.reload();
-      };
-      
-      window.ethereum.on('chainChanged', handleChainChanged);
-      
-      return () => {
-        window.ethereum.removeListener('chainChanged', handleChainChanged);
-      };
+    // Store the current chainId in a ref to detect changes
+    const savedChainId = localStorage.getItem('current-chain-id');
+    
+    // If we have a previous chain ID saved and it's different, reload the page
+    if (savedChainId && parseInt(savedChainId) !== chainId) {
+      window.location.reload();
     }
-  }, []);
+    
+    // Save the current chain ID
+    localStorage.setItem('current-chain-id', chainId.toString());
+  }, [chainId]);
 }
 
 // Function to get chain configuration
@@ -65,30 +67,20 @@ function getChainConfig(chainId: number) {
 }
 
 // Function to switch to the correct network
-async function switchToCorrectNetwork() {
-  if (!window.ethereum) return false;
+async function switchToCorrectNetwork(walletClient: any) {
+  if (!walletClient) return false;
   
   try {
-    // Try to switch to the correct network
-    await window.ethereum.request({
-      method: 'wallet_switchEthereumChain',
-      params: [{ chainId: `0x${ACTIVE_CHAIN_ID.toString(16)}` }],
-    });
-    return true;
-  } catch (switchError: any) {
-    // This error code indicates that the chain has not been added to MetaMask
-    if (switchError.code === 4902) {
-      try {
-        await window.ethereum.request({
-          method: 'wallet_addEthereumChain',
-          params: [getChainConfig(ACTIVE_CHAIN_ID)],
-        });
-        return true;
-      } catch (addError) {
-        console.error('Error adding Polygon network:', addError);
-        return false;
-      }
+    // Try to switch to the correct network using walletClient
+    if (walletClient.switchChain) {
+      await walletClient.switchChain({ id: ACTIVE_CHAIN_ID });
+      return true;
+    } else {
+      // Fallback for older versions or compatibility
+      console.error('switchChain not available on walletClient');
+      return false;
     }
+  } catch (switchError: any) {
     console.error('Error switching to Polygon network:', switchError);
     return false;
   }
@@ -274,8 +266,8 @@ export function usePurchaseSlots() {
       setSuccess(false);
       setTxHash(null);
 
-      // Create contract instance
-      const provider = new ethers.BrowserProvider(window.ethereum);
+      // Create contract instance using walletClient.transport
+      const provider = new ethers.BrowserProvider(walletClient.transport);
       const signer = await provider.getSigner();
       const marketplaceContract = new ethers.Contract(
         ADDRESSES.MARKETPLACE,
@@ -453,6 +445,7 @@ export function usePropertyInfo(propertyAddress: string) {
 export function useTokenBalance() {
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
+  console.log('useTokenBalance: WalletClient', walletClient);
   const [balance, setBalance] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -487,8 +480,8 @@ export function useTokenBalance() {
       ];
       
       try {
-        // Create provider from wallet client
-        const provider = new ethers.BrowserProvider(window.ethereum);
+        // Create provider from walletClient's transport
+        const provider = new ethers.BrowserProvider(walletClient.transport);
         
         // Ensure addresses are properly checksummed
         const checksummedTokenAddress = ethers.getAddress(tokenAddress);
@@ -534,22 +527,10 @@ export function useTokenBalance() {
     if (!isConnected || !address || !walletClient) return;
 
     console.log('useTokenBalance: Setting up balance polling');
-    const interval = setInterval(fetchBalance, 30000); // Poll every 3 seconds when connected
-    
-    // Listen for network and account changes
-    if (window.ethereum) {
-      window.ethereum.on('chainChanged', fetchBalance);
-      window.ethereum.on('accountsChanged', fetchBalance);
-      window.ethereum.on('connect', fetchBalance);
-    }
+    const interval = setInterval(fetchBalance, 30000);
     
     return () => {
       clearInterval(interval);
-      if (window.ethereum) {
-        window.ethereum.removeListener('chainChanged', fetchBalance);
-        window.ethereum.removeListener('accountsChanged', fetchBalance);
-        window.ethereum.removeListener('connect', fetchBalance);
-      }
     };
   }, [isConnected, address, walletClient, fetchBalance]);
   
@@ -564,12 +545,13 @@ export function useTokenBalance() {
 // Hook for token approval
 export function useTokenApproval() {
   const { signer, isConnected, account } = useContracts();
+  const { data: walletClient } = useWalletClient();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [allowance, setAllowance] = useState<string | null>(null);
 
   const checkAllowance = useCallback(async (spenderAddress: string) => {
-    if (!signer || !isConnected || !account) return null;
+    if (!isConnected || !account || !walletClient) return null;
 
     try {
       const ethers = await import('ethers');
@@ -591,7 +573,9 @@ export function useTokenApproval() {
         const checksummedSpender = ethers.getAddress(spenderAddress);
         const checksummedOwner = ethers.getAddress(account);
 
-       
+        // Create provider from walletClient's transport
+        const provider = new ethers.BrowserProvider(walletClient.transport);
+        const signer = await provider.getSigner();
 
         // Basic ERC20 ABI for approval functions
         const abi = [
@@ -623,10 +607,10 @@ export function useTokenApproval() {
       setError(err?.message || 'Failed to check allowance');
       return null;
     }
-  }, [signer, isConnected, account]);
+  }, [account, isConnected, walletClient]);
 
   const approve = useCallback(async (spenderAddress: string, amount: number) => {
-    if (!signer || !isConnected || !account) {
+    if (!isConnected || !account || !walletClient) {
       throw new Error('Wallet not connected');
     }
 
@@ -653,7 +637,9 @@ export function useTokenApproval() {
         const checksummedTokenAddress = ethers.getAddress(tokenAddress);
         const checksummedSpender = ethers.getAddress(spenderAddress);
 
-       
+        // Create provider from walletClient's transport
+        const provider = new ethers.BrowserProvider(walletClient.transport);
+        const signer = await provider.getSigner();
 
         // Basic ERC20 ABI for approval
         const abi = [
@@ -692,7 +678,7 @@ export function useTokenApproval() {
     } finally {
       setLoading(false);
     }
-  }, [signer, isConnected, account, checkAllowance]);
+  }, [account, isConnected, walletClient, checkAllowance]);
 
   return {
     approve,

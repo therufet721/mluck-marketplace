@@ -3,125 +3,71 @@ import { ethers } from 'ethers';
 import * as contracts from '../contracts';
 import { useProperties } from '../../contexts/PropertiesContext'; // Fix import path
 import { Property } from '../../types'; // Import Property type
+import { useAccount, useWalletClient, useChainId, useConnect, useDisconnect } from 'wagmi';
 
 export function useContracts() {
   const { properties } = useProperties();
   const [provider, setProvider] = useState<ethers.BrowserProvider | null>(null);
   const [signer, setSigner] = useState<ethers.JsonRpcSigner | null>(null);
-  const [account, setAccount] = useState<string | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const [chainId, setChainId] = useState<number | null>(null);
+  const { address: account, isConnected } = useAccount();
+  const { data: walletClient } = useWalletClient();
+  const chainId = useChainId();
+  const { connectAsync, connectors } = useConnect();
   const [propertyAddresses, setPropertyAddresses] = useState<{ [key: string]: string }>({});
 
   // Initialize provider and set property addresses from context
   useEffect(() => {
-    const init = async () => {
-      // Set property addresses from context
-      const addresses = properties.reduce((acc: { [key: string]: string }, property: Property) => ({
-        ...acc,
-        [property.address]: property.address
-      }), {});
-      setPropertyAddresses(addresses);
+    // Set property addresses from context
+    const addresses = properties.reduce((acc: { [key: string]: string }, property: Property) => ({
+      ...acc,
+      [property.address]: property.address
+    }), {});
+    setPropertyAddresses(addresses);
 
-      if (typeof window !== 'undefined' && window.ethereum) {
+    // Initialize provider and signer when walletClient is available
+    const initProviderAndSigner = async () => {
+      if (walletClient && isConnected) {
         try {
-          // Only check if already connected, don't request connection
-          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-          if (accounts.length > 0) {
-            const ethersProvider = new ethers.BrowserProvider(window.ethereum);
-            const ethersSigner = await ethersProvider.getSigner();
-            const network = await ethersProvider.getNetwork();
-
-            setProvider(ethersProvider);
-            setSigner(ethersSigner);
-            setAccount(accounts[0]);
-            setChainId(Number(network.chainId));
-            setIsConnected(true);
-          }
-        } catch (error) {
-          console.error('Error checking MetaMask connection', error);
-          setIsConnected(false);
-        }
-      } else {
-        setIsConnected(false);
-      }
-    };
-
-    init();
-
-    // Listen for account changes
-    if (window.ethereum) {
-      window.ethereum.on('accountsChanged', async (accounts: string[]) => {
-        if (accounts.length === 0) {
-          // User disconnected
-          setIsConnected(false);
-          setAccount(null);
-          setSigner(null);
-        } else {
-          setAccount(accounts[0]);
-          if (provider) {
-            const newSigner = await provider.getSigner();
-            setSigner(newSigner);
-            setIsConnected(true);
-          }
-        }
-      });
-
-      // Listen for chain changes
-      window.ethereum.on('chainChanged', async (chainIdHex: string) => {
-        const newChainId = parseInt(chainIdHex, 16);
-        setChainId(newChainId);
-        try {
-          // Reload provider and signer on chain change
-          const ethersProvider = new ethers.BrowserProvider(window.ethereum);
+          // Create provider from walletClient's transport
+          const ethersProvider = new ethers.BrowserProvider(walletClient.transport);
           const ethersSigner = await ethersProvider.getSigner();
+          
           setProvider(ethersProvider);
           setSigner(ethersSigner);
-          
-          // Update connection status
-          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-          if (accounts.length > 0) {
-            setAccount(accounts[0]);
-            setIsConnected(true);
-          }
         } catch (error) {
-          console.error('Error updating provider after chain change:', error);
+          console.error('Error initializing provider and signer:', error);
         }
-      });
-    }
-
-    return () => {
-      // Clean up listeners
-      if (window.ethereum) {
-        window.ethereum.removeAllListeners('accountsChanged');
-        window.ethereum.removeAllListeners('chainChanged');
+      } else {
+        setSigner(null);
       }
     };
-  }, [properties]); // Add properties as dependency
+
+    initProviderAndSigner();
+  }, [properties, walletClient, isConnected]);
 
   // Function to manually connect wallet
   const connectWallet = useCallback(async () => {
-    if (typeof window !== 'undefined' && window.ethereum) {
-      try {
-        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-        const ethersProvider = new ethers.BrowserProvider(window.ethereum);
+    try {
+      // Connect using the first available connector
+      if (connectors.length > 0) {
+        await connectAsync({ connector: connectors[0] });
+      }
+      
+      if (walletClient && isConnected) {
+        // Create provider from walletClient's transport
+        const ethersProvider = new ethers.BrowserProvider(walletClient.transport);
         const ethersSigner = await ethersProvider.getSigner();
-        const network = await ethersProvider.getNetwork();
-
+        
         setProvider(ethersProvider);
         setSigner(ethersSigner);
-        setAccount(accounts[0]);
-        setChainId(Number(network.chainId));
-        setIsConnected(true);
         return true;
-      } catch (error) {
-        console.error('Error connecting to wallet', error);
-        return false;
       }
-    } else {
+      return false;
+    } catch (error) {
+      console.error('Error connecting to wallet', error);
       return false;
     }
-  }, []);
+  }, [connectAsync, connectors, walletClient, isConnected]);
 
   // Marketplace functions with proper error handling
   const getProperty = useCallback(async (propertyAddress: string) => {

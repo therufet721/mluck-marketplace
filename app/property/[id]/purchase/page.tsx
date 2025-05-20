@@ -408,7 +408,6 @@ export default function PropertyPurchasePage() {
   // Effect to synchronize wallet connection state and fetch balance immediately
   useEffect(() => {
     if (isConnected && isConnectedAuth) {
-      console.log('PropertyPurchasePage: Wallet connected and authenticated, fetching balance');
       // Add a small delay to ensure wallet is fully initialized
       setTimeout(() => {
         refetchBalance();
@@ -419,7 +418,6 @@ export default function PropertyPurchasePage() {
   // Effect to update balance when promocode validation changes
   useEffect(() => {
     if (isConnected && isConnectedAuth && promocodeValid !== null) {
-      console.log('PropertyPurchasePage: Promocode validation changed, updating balance');
       refetchBalance();
     }
   }, [isConnected, isConnectedAuth, promocodeValid, refetchBalance]);
@@ -427,7 +425,6 @@ export default function PropertyPurchasePage() {
   // Effect to update balance after purchase steps
   useEffect(() => {
     if (isConnected && isConnectedAuth && (purchaseStep === 'success' || purchaseStep === 'error')) {
-      console.log('PropertyPurchasePage: Purchase step changed, updating balance');
       refetchBalance();
     }
   }, [isConnected, isConnectedAuth, purchaseStep, refetchBalance]);
@@ -543,17 +540,10 @@ useEffect(() => {
   // Function to validate promocode
   const validatePromocode = useCallback(async () => {
     // Add direct debug logs
-    console.log('validatePromocode called with:', { 
-      promocode, 
-      account, 
-      walletInfo: {
-        address: account,
-        isConnected
-      }
-    });
+
 
     if (!promocode || !account) {
-      console.log('Validation aborted - missing promocode or account:', { promocode, account });
+      
       setPromocodeValid(null);
       setPromocodeDiscount(0);
       setPromocodeSignature(null);
@@ -885,7 +875,6 @@ useEffect(() => {
 
   // Add effect to handle wallet connection button click
   const handleWalletConnect = useCallback(() => {
-    console.log('PropertyPurchasePage: Wallet connect button clicked');
     // Add a small delay to ensure wallet is fully initialized
     setTimeout(() => {
       if (isConnected && isConnectedAuth) {

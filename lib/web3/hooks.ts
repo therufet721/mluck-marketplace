@@ -340,12 +340,7 @@ export function usePurchaseSlotsWithPromo() {
       // Checksum the property address
       const checksummedPropertyAddress = ethers.getAddress(propertyAddress)
       
-      console.log('Starting purchase with promo:', {
-        propertyAddress: checksummedPropertyAddress,
-        slotIds,
-        promoHash,
-        signature
-      })
+
       
       if (!checksummedPropertyAddress) {
         throw new Error('Property address not configured')
@@ -361,30 +356,19 @@ export function usePurchaseSlotsWithPromo() {
           
           // If current allowance is less than required amount, request approval
           if (currentAllowance < tokenAmount) {
-            console.log(`Current allowance (${currentAllowance}) is less than required (${tokenAmount}). Requesting approval...`)
             await approve(spenderAddress, tokenAmount)
           } else {
             console.log(`Current allowance (${currentAllowance}) is sufficient for purchase (${tokenAmount})`)
           }
         }
       }
-      
-      // Call the buyWithPromo function
-      console.log('Calling buyWithPromo with params:', {
-        propertyAddress: checksummedPropertyAddress,
-        slotIds,
-        promoHash,
-        signature
-      })
+    
       
       const tx = await buyWithPromo(checksummedPropertyAddress, slotIds, promoHash, signature)
       setTxHash(tx.hash)
-      console.log('Transaction submitted:', tx.hash)
       
       // Wait for transaction to be mined
-      console.log('Waiting for transaction confirmation...')
       await tx.wait()
-      console.log('Transaction confirmed!')
       
       setSuccess(true)
     } catch (err: any) {
@@ -445,7 +429,6 @@ export function usePropertyInfo(propertyAddress: string) {
 export function useTokenBalance() {
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
-  console.log('useTokenBalance: WalletClient', walletClient);
   const [balance, setBalance] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -453,11 +436,10 @@ export function useTokenBalance() {
   const fetchBalance = useCallback(async () => {
     if (!address || !isConnected || !walletClient) {
       setBalance(null);
-      console.log('useTokenBalance: fetchBalance aborted - no account, not connected, or no walletClient.', { address, isConnected, hasWalletClient: !!walletClient });
+      
       return;
     }
     
-    console.log('useTokenBalance: Starting fetchBalance for account:', address);
     try {
       setLoading(true);
       setError(null);
@@ -498,7 +480,6 @@ export function useTokenBalance() {
         // Format the balance
         const formattedBalance = ethers.formatUnits(balanceBN, decimals);
         
-        console.log('useTokenBalance: Fetched raw balance:', balanceBN.toString(), 'Formatted:', formattedBalance, symbol);
         setBalance(`${formattedBalance} ${symbol}`);
       } catch (checksumError: any) {
         console.error('useTokenBalance: Error with address checksum:', checksumError);
@@ -510,7 +491,6 @@ export function useTokenBalance() {
       setError(err?.message || 'Failed to fetch token balance');
     } finally {
       setLoading(false);
-      console.log('useTokenBalance: Finished fetchBalance for account:', address);
     }
   }, [address, isConnected, walletClient]);
   

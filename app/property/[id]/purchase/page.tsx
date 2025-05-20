@@ -87,7 +87,7 @@ export default function PropertyPurchasePage() {
   // Use simplified wallet status hook
   const { isConnected, address: account } = useWalletStatus();
   
-  // Get token balance
+  // Get token balance with improved hook
   const { balance, loading: balanceLoading, refetch: refetchBalance } = useTokenBalance();
   
   // Get purchase functionality
@@ -402,24 +402,35 @@ export default function PropertyPurchasePage() {
     }
   }, [isConnected, selectedSlots, checkAllowance, propertyDetails]);
 
-  // Modify balance polling to be more efficient
+  // Use auth context
+  const { isAuthenticated: isConnectedAuth, isLoading: authLoading, isWrongNetwork, switchNetwork, isSwitchingNetwork } = useAuth();
+  
+  // Effect to synchronize wallet connection state and fetch balance immediately
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-    
-    if (isConnected) {
-      // Initial balance check
-      refetchBalance();
-      
-      // Only set up polling if user has selected slots or is in purchase flow
-      if (selectedSlots.length > 0 || purchaseStep !== 'select') {
-        interval = setInterval(refetchBalance, 5000); // Only poll during active selection
-      }
+    if (isConnected && isConnectedAuth) {
+      console.log('PropertyPurchasePage: Wallet connected and authenticated, fetching balance');
+      // Add a small delay to ensure wallet is fully initialized
+      setTimeout(() => {
+        refetchBalance();
+      }, 15000);
     }
-    
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isConnected, refetchBalance, selectedSlots.length, purchaseStep]);
+  }, [isConnected, isConnectedAuth, refetchBalance]);
+
+  // Effect to update balance when promocode validation changes
+  useEffect(() => {
+    if (isConnected && isConnectedAuth && promocodeValid !== null) {
+      console.log('PropertyPurchasePage: Promocode validation changed, updating balance');
+      refetchBalance();
+    }
+  }, [isConnected, isConnectedAuth, promocodeValid, refetchBalance]);
+
+  // Effect to update balance after purchase steps
+  useEffect(() => {
+    if (isConnected && isConnectedAuth && (purchaseStep === 'success' || purchaseStep === 'error')) {
+      console.log('PropertyPurchasePage: Purchase step changed, updating balance');
+      refetchBalance();
+    }
+  }, [isConnected, isConnectedAuth, purchaseStep, refetchBalance]);
 
   // Add this effect to update from URL
   useEffect(() => {
@@ -469,6 +480,19 @@ export default function PropertyPurchasePage() {
     e.stopPropagation();
   };
 
+  // Helper function to calculate discounted price
+  const calculateDiscountedTotalCost = useCallback((slotCount: number) => {
+    if (!propertyDetails) return 0;
+    
+    // If we have a contract-calculated discounted cost, use that
+    if (discountedCost !== null && promocodeValid && promocodeHash) {
+      return discountedCost;
+    }
+    
+    // If no discount value available, return the regular price
+    return calculateTotalCost(slotCount);
+  }, [propertyDetails, promocodeValid, promocodeHash, discountedCost, calculateTotalCost]);
+
   // Function to fetch discounted cost from contract
   const fetchDiscountedCost = useCallback(async () => {
     if (!propertyId || !selectedSlots.length || !promocodeHash || !promocodeValid) {
@@ -477,8 +501,9 @@ export default function PropertyPurchasePage() {
     }
 
     try {
+      setPromocodeLoading(true);
       const provider = getProvider();
-      // Use the imported function directly
+      // Use the imported function directly to get cost from the blockchain
       const cost = await getCostUsingPromo(
         provider as ethers.JsonRpcProvider,
         propertyId,
@@ -488,10 +513,12 @@ export default function PropertyPurchasePage() {
       // Convert from wei to USDT (6 decimals for USDT)
       const costInUsdt = Number(cost) / 1e6;
       setDiscountedCost(costInUsdt);
+      setPromocodeLoading(false);
       return costInUsdt;
     } catch (error) {
       console.error('Error fetching discounted cost:', error);
       setDiscountedCost(null);
+      setPromocodeLoading(false);
       return null;
     }
   }, [propertyId, selectedSlots.length, promocodeHash, promocodeValid]);
@@ -505,91 +532,69 @@ export default function PropertyPurchasePage() {
     }
   }, [promocodeValid, promocodeHash, selectedSlots.length, fetchDiscountedCost]);
 
-  // Helper function to calculate discounted price
-  const calculateDiscountedTotalCost = useCallback((slotCount: number) => {
-    if (!propertyDetails) return 0;
-    
-    // If we have a contract-calculated discounted cost, use that
-    if (discountedCost !== null && promocodeValid && promocodeHash) {
-      return discountedCost;
-    }
-    
-    // Otherwise fall back to client-side calculation
-    const baseTotalInWei = BigInt(slotCount) * BigInt(propertyDetails.price + propertyDetails.fee);
-    
-    if (promocodeValid && promocodeDiscount > 0 && promocodeDiscount <= 1) {
-      const discountPercent = Math.floor(promocodeDiscount * 100);
-      const remainingPercent = 100 - discountPercent;
-      
-      // Special case for 99% discount on 100 USDT to ensure we get exactly 1.00 USDT
-      if (discountPercent === 99 && Number(baseTotalInWei) / 1e6 === 100) {
-        return 1.00;
-      }
-      
-      const remainingFactor = remainingPercent / 100;
-      const scaleFactor = 1000000; // Use a large scale factor for precision
-      const scaledRemainingFactor = Math.round(remainingFactor * scaleFactor);
-      const discountedTotalInWei = baseTotalInWei * BigInt(scaledRemainingFactor) / BigInt(scaleFactor);
-      return Number(discountedTotalInWei) / 1e6;
-    }
-    
-    // If no discount, return the base total in USDT
-    return Number(baseTotalInWei) / 1e6;
-  }, [propertyDetails, promocodeValid, promocodeDiscount, discountedCost, promocodeHash]);
+  // Add this effect to immediately recalculate when selection changes with valid promocode
+useEffect(() => {
+  if (promocodeValid && promocodeHash && selectedSlots.length > 0) {
+    // Force recalculation when slot selection changes with valid promocode
+    fetchDiscountedCost();
+  }
+}, [selectedSlots, promocodeValid, promocodeHash, fetchDiscountedCost]);
 
   // Function to validate promocode
-  const validatePromocode = useCallback(async () => {
-    if (!promocode || !isConnected || !account) {
-      setPromocodeValid(null);
-      setPromocodeDiscount(0);
-      setPromocodeSignature(null);
-      setPromocodeHash(null);
-      return;
-    }
+const validatePromocode = useCallback(async () => {
+  if (!promocode || !account) {
+    setPromocodeValid(null);
+    setPromocodeDiscount(0);
+    setPromocodeSignature(null);
+    setPromocodeHash(null);
+    setDiscountedCost(null);
+    return;
+  }
 
-    try {
-      setPromocodeLoading(true);
-      setPromocodeError(null);
+  try {
+    setPromocodeLoading(true);
+    setPromocodeError(null);
 
-          // Call the API to get the signature
+    // Call the API to get the signature
     const promoData = await getPromocodeSignature(account, promocode);
     
     // Check if we have the required fields in the response
     if (!promoData.signature || !promoData.promoHash) {
-        throw new Error('Missing required promocode data');
-      }
+      throw new Error('Missing required promocode data');
+    }
 
-      // Store the signature and hash for later use
-      setPromocodeSignature(promoData.signature);
-      setPromocodeHash(promoData.promoHash);
-      
-          // Get the actual promocode details from the blockchain
+    // Store the signature and hash for later use
+    setPromocodeSignature(promoData.signature);
+    setPromocodeHash(promoData.promoHash);
+    
+    // Get the actual promocode details from the blockchain
     const provider = getProvider();
     const promocodeDetails = await getPromoCode(provider as ethers.JsonRpcProvider, promoData.promoHash);
     
     // Set the discount percentage from blockchain data (already in decimal form)
     const discountPercent = Number(promocodeDetails.percent) / 10000;
-      
-      if (discountPercent <= 0 || discountPercent > 1) {
-        throw new Error('Invalid discount percentage. Must be between 0 and 100%.');
-      }
-      
-      setPromocodeValid(true);
-      setPromocodeDiscount(discountPercent);
-      
-          // Fetch the discounted cost from the contract
-    await fetchDiscountedCost();
-    } catch (error: any) {
-      console.error('Promocode validation error:', error);
-      setPromocodeValid(false);
-      setPromocodeError(error.message || 'Invalid promocode');
-      setPromocodeDiscount(0);
-      setPromocodeSignature(null);
-      setPromocodeHash(null);
-    } finally {
-      setPromocodeLoading(false);
+    
+    if (discountPercent <= 0 || discountPercent > 1) {
+      throw new Error('Invalid discount percentage. Must be between 0 and 100%.');
     }
-  }, [promocode, isConnected, account, fetchDiscountedCost]);
+    
+    setPromocodeValid(true);
+    setPromocodeDiscount(discountPercent);
+    
+    // Fetch the discounted cost from the contract is handled separately
+    // to avoid nested loading states
+  } catch (error: any) {
+    console.error('Promocode validation error:', error);
+    setPromocodeValid(false);
+    setPromocodeError(error.message || 'Invalid promocode');
+    setPromocodeDiscount(0);
+    setPromocodeSignature(null);
+    setPromocodeHash(null);
+    setDiscountedCost(null);
+  } finally {
+    setPromocodeLoading(false);
+  }
+}, [promocode, account]);
 
   // Modify promo code validation to be more efficient
   useEffect(() => {
@@ -608,17 +613,13 @@ export default function PropertyPurchasePage() {
     return () => clearTimeout(timer);
   }, [promocode, validatePromocode]);
 
-  // Use auth context
-  const { isAuthenticated: isConnectedAuth, isLoading: authLoading, isWrongNetwork, switchNetwork, isSwitchingNetwork } = useAuth();
-
   // Update button rendering logic
   const renderPurchaseButton = () => {
     if (authLoading) return 'Connecting...';
-    // Don't return component directly - return text for consistency
-    if (!isConnectedAuth) return 'Connect Wallet';
+    if (!isConnectedAuth) return renderConnectButton();
     if (isWrongNetwork && isSwitchingNetwork) return 'Switching Network...';
     if (selectedSlots.length === 0) return 'Select Slots';
-    if (balanceLoading || promocodeLoading) return 'Checking...';
+    if (balanceLoading) return 'Checking...';
     
     const totalCost = promocodeValid ? 
       calculateDiscountedTotalCost(selectedSlots.length) : 
@@ -852,6 +853,8 @@ export default function PropertyPurchasePage() {
       setNeedsApproval(false);
       
       // Automatically proceed with purchase after approval
+      // No need to set purchase step to 'confirm' here, directly purchase
+      setPurchaseStep('processing'); // Ensure processing step is set before async operations
       try {
         if (promocodeValid && promocodeSignature && promocodeHash) {
           // Pass all 4 parameters: property address, slots, promoHash, signature
@@ -869,6 +872,42 @@ export default function PropertyPurchasePage() {
     }
   };
 
+  // Add effect to handle wallet connection button click
+  const handleWalletConnect = useCallback(() => {
+    console.log('PropertyPurchasePage: Wallet connect button clicked');
+    // Add a small delay to ensure wallet is fully initialized
+    setTimeout(() => {
+      if (isConnected && isConnectedAuth) {
+        refetchBalance();
+      }
+    }, 500);
+  }, [isConnected, isConnectedAuth, refetchBalance]);
+
+  // Update the ConnectButton.Custom render prop
+  const renderConnectButton = () => (
+    <ConnectButton.Custom>
+      {({ account, chain, openConnectModal, mounted }) => {
+        const ready = mounted;
+        return (
+          <div 
+            onClick={() => {
+              openConnectModal();
+              handleWalletConnect();
+            }} 
+            style={{ 
+              width: '100%', 
+              display: 'flex', 
+              justifyContent: 'center',
+              cursor: 'pointer',
+              opacity: ready ? 1 : 0.5
+            }}
+          >
+            Connect Wallet
+          </div>
+        );
+      }}
+    </ConnectButton.Custom>
+  );
 
   return (
     <>
@@ -1878,21 +1917,7 @@ export default function PropertyPurchasePage() {
                 }}
               >
                 {!isConnectedAuth ? (
-                  <ConnectButton.Custom>
-                    {({ account, chain, openConnectModal }) => (
-                      <div 
-                        onClick={openConnectModal} 
-                        style={{ 
-                          width: '100%', 
-                          display: 'flex', 
-                          justifyContent: 'center',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Connect Wallet
-                      </div>
-                    )}
-                  </ConnectButton.Custom>
+                  renderConnectButton()
                 ) : (
                   renderPurchaseButton()
                 )}
@@ -2141,21 +2166,7 @@ export default function PropertyPurchasePage() {
                 disabled={isButtonDisabled()}
               >
                 {!isConnectedAuth ? (
-                  <ConnectButton.Custom>
-                    {({ account, chain, openConnectModal }) => (
-                      <div 
-                        onClick={openConnectModal} 
-                        style={{ 
-                          width: '100%', 
-                          display: 'flex', 
-                          justifyContent: 'center',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Connect Wallet
-                      </div>
-                    )}
-                  </ConnectButton.Custom>
+                  renderConnectButton()
                 ) : (
                   renderPurchaseButton()
                 )}

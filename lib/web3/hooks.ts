@@ -451,17 +451,20 @@ export function usePropertyInfo(propertyAddress: string) {
 
 // Hook for getting token balance
 export function useTokenBalance() {
-  const { account, isConnected, provider } = useContracts();
+  const { address, isConnected } = useAccount();
+  const { data: walletClient } = useWalletClient();
   const [balance, setBalance] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   const fetchBalance = useCallback(async () => {
-    if (!account || !isConnected || !provider) {
+    if (!address || !isConnected || !walletClient) {
       setBalance(null);
+      console.log('useTokenBalance: fetchBalance aborted - no account, not connected, or no walletClient.', { address, isConnected, hasWalletClient: !!walletClient });
       return;
     }
     
+    console.log('useTokenBalance: Starting fetchBalance for account:', address);
     try {
       setLoading(true);
       setError(null);
@@ -484,54 +487,71 @@ export function useTokenBalance() {
       ];
       
       try {
+        // Create provider from wallet client
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        
         // Ensure addresses are properly checksummed
         const checksummedTokenAddress = ethers.getAddress(tokenAddress);
-        const checksummedAccount = ethers.getAddress(account);
+        const checksummedAccount = ethers.getAddress(address);
         
-        // Create a contract instance using the connected provider
+        // Create a contract instance using the provider
         const tokenContract = new ethers.Contract(checksummedTokenAddress, abi, provider);
         
         // Get token info
-        const balance = await tokenContract.balanceOf(checksummedAccount);
+        const balanceBN = await tokenContract.balanceOf(checksummedAccount);
         const decimals = await tokenContract.decimals();
         const symbol = await tokenContract.symbol();
         
         // Format the balance
-        const formattedBalance = ethers.formatUnits(balance, decimals);
+        const formattedBalance = ethers.formatUnits(balanceBN, decimals);
         
+        console.log('useTokenBalance: Fetched raw balance:', balanceBN.toString(), 'Formatted:', formattedBalance, symbol);
         setBalance(`${formattedBalance} ${symbol}`);
       } catch (checksumError: any) {
-        console.error('Error with address checksum:', checksumError);
+        console.error('useTokenBalance: Error with address checksum:', checksumError);
         setError('Invalid address format');
         return;
       }
     } catch (err: any) {
-      console.error('Error fetching token balance:', err);
+      console.error('useTokenBalance: Error fetching token balance:', err);
       setError(err?.message || 'Failed to fetch token balance');
     } finally {
       setLoading(false);
+      console.log('useTokenBalance: Finished fetchBalance for account:', address);
     }
-  }, [account, isConnected, provider]);
+  }, [address, isConnected, walletClient]);
   
-  // Fetch balance on mount and when account or provider changes
+  // Fetch balance immediately when account or connection status changes
   useEffect(() => {
-    fetchBalance();
+    if (isConnected && address && walletClient) {
+      console.log('useTokenBalance: Connection detected, fetching initial balance');
+      fetchBalance();
+    }
+  }, [isConnected, address, walletClient, fetchBalance]);
+
+  // Set up polling for balance updates
+  useEffect(() => {
+    if (!isConnected || !address || !walletClient) return;
+
+    console.log('useTokenBalance: Setting up balance polling');
+    const interval = setInterval(fetchBalance, 30000); // Poll every 3 seconds when connected
     
-    // Set up polling for balance updates with shorter interval
-    const interval = setInterval(fetchBalance, 10000); // Update every 10 seconds
-    
-    // Listen for network changes
+    // Listen for network and account changes
     if (window.ethereum) {
       window.ethereum.on('chainChanged', fetchBalance);
+      window.ethereum.on('accountsChanged', fetchBalance);
+      window.ethereum.on('connect', fetchBalance);
     }
     
     return () => {
       clearInterval(interval);
       if (window.ethereum) {
         window.ethereum.removeListener('chainChanged', fetchBalance);
+        window.ethereum.removeListener('accountsChanged', fetchBalance);
+        window.ethereum.removeListener('connect', fetchBalance);
       }
     };
-  }, [account, isConnected, provider, fetchBalance]);
+  }, [isConnected, address, walletClient, fetchBalance]);
   
   return {
     balance,
